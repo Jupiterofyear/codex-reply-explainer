@@ -1,0 +1,11 @@
+#explanation{overflow-wrap:anywhere;white-space:normal}
+#explanation>:first-child{margin-top:0}#explanation>:last-child{margin-bottom:0}
+#explanation p{margin:0 0 1em}#explanation strong{font-weight:650}
+#explanation h1,#explanation h2,#explanation h3{font-size:1.1em;line-height:1.5;margin:1.2em 0 .55em}
+#explanation ul,#explanation ol{padding-left:1.5em;margin:.6em 0 1em}#explanation li{margin:.3em 0}
+#explanation li p{margin:.3em 0}#explanation blockquote{border-left:3px solid #ddd;color:#666;margin:1em 0;padding-left:1em}
+#explanation code{font-family:Consolas,monospace;font-size:.88em;background:#f4f4f4;border-radius:5px;padding:.12em .3em}
+#explanation pre{overflow:auto;background:#f5f5f5;border-radius:10px;padding:12px;line-height:1.6}#explanation pre code{padding:0;background:none}
+#explanation table{border-collapse:collapse;display:block;overflow-x:auto;margin:1em 0}#explanation th,#explanation td{border:1px solid #ddd;padding:6px 10px}
+#explanation a{color:#3668ad;text-decoration:underline}#explanation hr{border:0;border-top:1px solid #e5e5e5;margin:1em 0}
+#explanation .katex{font-size:1.08em}#explanation .katex-display{overflow-x:auto;overflow-y:hidden;padding:.25em 0}
