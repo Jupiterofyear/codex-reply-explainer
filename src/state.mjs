@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, mkdir, readdir, rm } from "node:fs/promises";
+import { readFile, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -36,7 +36,18 @@ export function explanationFiles(dataRoot, selection, turnId) {
 }
 export async function isWindowOpen(dataRoot) {
   const directory = path.join(dataRoot, "floating");
-  const window = await readJson(path.join(directory, "window.json"));
+  const file = path.join(directory, "window.json");
+  let window;
+  try { window = await readJson(file); }
+  catch (error) {
+    // Deleting the window marker can briefly make Windows deny a concurrent open.
+    // Only treat it as closed after confirming that this exact marker is gone.
+    if (process.platform === "win32" && error.code === "EPERM") {
+      try { await stat(file); }
+      catch (checkError) { if (checkError.code === "ENOENT") return null; }
+    }
+    throw error;
+  }
   if (!window) return null;
   try { process.kill(window.pid, 0); }
   catch (error) { if (error.code === "ESRCH") return null; throw error; }
@@ -54,13 +65,14 @@ export async function discardSelection(dataRoot, selection) {
   const { directory, latest } = explanationFiles(dataRoot, selection);
   const files = await readdir(directory);
   for (const file of files) {
-    if (file === path.basename(latest) || file.startsWith("result-" + selection.openId + "-")) await rm(path.join(directory, file), { force: true });
+    if (file === path.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path.join(directory, file), { force: true });
   }
 }
 export async function selectChat(dataRoot, threadId, title) {
   threadDirectory(dataRoot, threadId);
   const file = path.join(dataRoot, "floating", "selection.json");
   const previous = await readJson(file);
+  if (previous?.threadId === threadId && await isWindowOpen(dataRoot)) return previous;
   const selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
   await writeJson(file, selection);
   await discardSelection(dataRoot, previous);

@@ -6,6 +6,14 @@ Explain Codex's latest reply in plain language in a separate floating window. **
 
 Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
+### Development branch: explanations and questions (unreleased)
+
+The floating window now has **解释 (Explain)** and **提问 (Ask)** tabs. Explanations continue updating automatically. Ask sends a question with the button or Ctrl+Enter. Switching tabs preserves the text, question draft, and scroll position.
+
+The first question forks the selected chat's latest complete saved context using its model and reasoning effort. Follow-up questions reuse that ephemeral branch; new main-chat replies do not replace it. **重新开始 (Start over)** discards the branch and reads the latest complete main-chat context on the next question. Rebinding the same chat preserves questions; switching chats or closing the window discards them. Restarting a crashed backend discards old questions without replaying them.
+
+Explanations and questions run one at a time. Start over cancels an active question. Question forks disable connector/MCP plugins, use a read-only sandbox, and reject interactive execution requests; the prompt asks the model to answer from existing context without tools. These tool settings can change the cached input prefix, so the historical explanation measurements below do not establish question performance. See [VALIDATION.md](VALIDATION.md) for local checks.
+
 ## Interface preview
 
 Edited from a real full-window screenshot, with chat names, project names, and avatar initials replaced. The text comes from an actual generation for a fictional scenario: a 708-character original reply and its 168-character explanation. The main chat shows the latter part of the long reply, while the floating window shows the complete explanation. Both appear near the top.

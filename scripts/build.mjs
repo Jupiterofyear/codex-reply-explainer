@@ -17,7 +17,7 @@ execFileSync(path.join(framework, "csc.exe"), ["/nologo", "/target:winexe", "/pl
   "/reference:" + path.resolve("vendor/webview2/lib/net462/Microsoft.Web.WebView2.Wpf.dll"),
   path.resolve("src/floating.cs"), path.resolve("src/markdown-view.cs")],
   { env: { ...process.env, TMP: temporary, TEMP: temporary }, windowsHide: true, stdio: "inherit" });
-await build({ entryPoints: ["src/server.mjs", "src/stop.mjs", "src/request.mjs", "src/start.mjs", "src/open-installed.mjs", "src/worker.mjs"], outdir: "dist", bundle: true, platform: "node", format: "esm", target: "node22", outExtension: { ".js": ".mjs" } });
+await build({ entryPoints: ["src/server.mjs", "src/stop.mjs", "src/request.mjs", "src/question-request.mjs", "src/start.mjs", "src/open-installed.mjs", "src/worker.mjs"], outdir: "dist", bundle: true, platform: "node", format: "esm", target: "node22", outExtension: { ".js": ".mjs" } });
 for (const name of ["Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.Wpf.dll"])
   await cp("vendor/webview2/lib/net462/" + name, "dist/" + name);
 await cp("vendor/webview2/runtimes/win-x64/native/WebView2Loader.dll", "dist/WebView2Loader.dll");

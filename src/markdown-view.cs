@@ -8,9 +8,9 @@ using Microsoft.Web.WebView2.Wpf;
 
 class MarkdownView : WebView2 {
     const string Page = "https://reply-explainer.invalid/floating-document.html";
-    readonly JavaScriptSerializer json = new JavaScriptSerializer();
+    readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     CoreWebView2Environment environment;
-    string profileDirectory, currentText = "";
+    string profileDirectory, currentContent = "{\"text\":\"\",\"page\":\"explanation\"}";
     Task initialization;
     bool ready;
 
@@ -44,12 +44,19 @@ class MarkdownView : WebView2 {
         if (Uri.TryCreate(value, UriKind.Absolute, out uri) && (uri.Scheme == "https" || uri.Scheme == "http"))
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
     }
-    public void SetText(string value) {
-        if (value == currentText) return;
-        currentText = value;
+    public void SetText(string value, string page = "explanation") {
+        SetContent(new { text = value, page = page });
+    }
+    public void SetMessages(object messages, string partial, string page) {
+        SetContent(new { messages = messages, partial = partial, page = page });
+    }
+    void SetContent(object content) {
+        string value = json.Serialize(content);
+        if (value == currentContent) return;
+        currentContent = value;
         if (ready) SendText();
     }
-    void SendText() { CoreWebView2.PostWebMessageAsJson(json.Serialize(new { text = currentText })); }
+    void SendText() { CoreWebView2.PostWebMessageAsJson(currentContent); }
     public async Task CloseAsync() {
         if (initialization != null) await initialization;
         if (environment == null) { Dispose(); return; }

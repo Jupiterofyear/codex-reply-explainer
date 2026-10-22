@@ -16,7 +16,7 @@ using System.Windows.Markup;
 using System.Windows.Threading;
 
 class FloatingExplanation {
-    static JavaScriptSerializer json = new JavaScriptSerializer();
+    static JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
@@ -85,6 +85,20 @@ class FloatingExplanation {
             }
         });
     }
+    static async Task QuestionRequest(string node, string dataRoot, string openId, string action, string text) {
+        var script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "question-request.mjs");
+        var info = new ProcessStartInfo(node, "\"" + script + "\" \"" + dataRoot + "\" " + openId + " " + action) {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardInput = true,
+            StandardErrorEncoding = new UTF8Encoding(false), WorkingDirectory = Path.GetDirectoryName(script)
+        };
+        await Task.Run(() => {
+            using (var child = Process.Start(info)) {
+                using (var input = new StreamWriter(child.StandardInput.BaseStream, new UTF8Encoding(false))) input.Write(text);
+                string error = child.StandardError.ReadToEnd(); child.WaitForExit();
+                if (child.ExitCode != 0) throw new Exception(error.Trim());
+            }
+        });
+    }
     [STAThread] static int Main(string[] args) {
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
         string dataRoot = Path.GetFullPath(args[0]);
@@ -116,19 +130,30 @@ class FloatingExplanation {
  </Window.Resources>
  <Border BorderBrush=""#E5E5E5"" BorderThickness=""1"" CornerRadius=""12"" Background=""White"">
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height=""48""/><RowDefinition Height=""*""/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height=""48""/><RowDefinition Height=""44""/><RowDefinition Height=""*""/></Grid.RowDefinitions>
    <Grid Margin=""20,0,8,0""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/></Grid.ColumnDefinitions>
     <TextBlock Text=""Codex 回复解释"" FontSize=""14"" FontWeight=""SemiBold"" VerticalAlignment=""Center""/>
     <Button x:Name=""Minimize"" Grid.Column=""1"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""最小化"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 10,0"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
     <Button x:Name=""CloseWindow"" Grid.Column=""2"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""关闭"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 9,9 M 9,0 L 0,9"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
    </Grid>
-   <Grid Grid.Row=""1"" Margin=""22,10,22,22"">
-    <Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
+   <Grid Grid.Row=""1"" Margin=""22,0,22,6""><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <Button x:Name=""ExplainTab"" Content=""解释"" Style=""{StaticResource ExplainButton}"" Height=""34"" Margin=""0,0,4,0""/>
+    <Button x:Name=""AskTab"" Content=""提问"" Grid.Column=""1"" Style=""{StaticResource ExplainButton}"" Height=""34"" Margin=""4,0,0,0""/>
+   </Grid>
+   <Grid Grid.Row=""2"" Margin=""22,10,22,22"">
+    <Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
     <Button x:Name=""ExplainCurrent"" Style=""{StaticResource ExplainButton}"" AutomationProperties.Name=""解释当前聊天""><StackPanel Orientation=""Horizontal""><Path Data=""M 12,4 A 5,5 0 1 0 12,10 M 12,0 L 12,4 L 8,4"" Width=""14"" Height=""14"" Stretch=""Uniform"" Stroke=""#505050"" StrokeThickness=""1.2"" Margin=""0,0,8,0"" VerticalAlignment=""Center""/><TextBlock Text=""解释当前聊天""/></StackPanel></Button>
     <TextBlock x:Name=""ChatName"" Grid.Row=""1"" Margin=""0,24,0,18"" FontSize=""17"" FontWeight=""SemiBold"" TextWrapping=""Wrap""/>
     <TextBlock x:Name=""Status"" Grid.Row=""2"" Style=""{StaticResource Notice}""/>
     <Grid x:Name=""ExplanationHost"" Grid.Row=""3""/>
     <TextBlock x:Name=""Failure"" Grid.Row=""4"" Style=""{StaticResource Notice}"" Margin=""0,12,0,0"" Foreground=""#AD5142""/>
+    <StackPanel x:Name=""QuestionControls"" Grid.Row=""5"" Visibility=""Collapsed"" Margin=""0,12,0,0"">
+     <TextBox x:Name=""QuestionInput"" AcceptsReturn=""True"" TextWrapping=""Wrap"" MinHeight=""64"" MaxHeight=""140"" Padding=""10"" FontSize=""14"" VerticalScrollBarVisibility=""Auto"" MaxLength=""32000"" AutomationProperties.Name=""输入问题""/>
+     <Grid Margin=""0,8,0,0""><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width=""100""/></Grid.ColumnDefinitions>
+      <Button x:Name=""RestartQuestions"" Content=""重新开始"" Style=""{StaticResource ExplainButton}"" Height=""34"" HorizontalAlignment=""Left"" Width=""100""/>
+      <Button x:Name=""SendQuestion"" Content=""发送"" Grid.Column=""1"" Style=""{StaticResource ExplainButton}"" Height=""34"" ToolTip=""Ctrl+Enter 发送""/>
+     </Grid>
+    </StackPanel>
    </Grid>
   </Grid>
  </Border>
@@ -158,22 +183,51 @@ class FloatingExplanation {
                     File.WriteAllText(layoutFile, json.Serialize(new { left = bounds.Left, top = bounds.Top, width = bounds.Width, height = bounds.Height }), Encoding.UTF8);
                 };
                 string lastOpenId = null;
-                bool closed = false;
+                bool closed = false, asking = false, submitting = false;
+                var explainTab = (Button)window.FindName("ExplainTab");
+                var askTab = (Button)window.FindName("AskTab");
+                var questionControls = (StackPanel)window.FindName("QuestionControls");
+                var questionInput = (TextBox)window.FindName("QuestionInput");
+                var sendQuestion = (Button)window.FindName("SendQuestion");
+                var restartQuestions = (Button)window.FindName("RestartQuestions");
                 Action refresh = () => {
+                    questionControls.Visibility = asking ? Visibility.Visible : Visibility.Collapsed;
+                    explainTab.FontWeight = asking ? FontWeights.Normal : FontWeights.Bold;
+                    askTab.FontWeight = asking ? FontWeights.Bold : FontWeights.Normal;
                     var selected = ReadJson(Path.Combine(directory, "selection.json"));
                     if (selected == null) {
                         chatName.Text = ""; explanation.SetText("");
-                        status.Text = "点击上方按钮，解释当前打开的聊天。";
+                        sendQuestion.IsEnabled = false; restartQuestions.IsEnabled = false;
+                        status.Text = "点击上方按钮，选择当前打开的聊天。";
                         return;
                     }
                     string id = Text(selected, "openId"); CheckId(id);
                     CheckId(Text(selected, "threadId"));
                     if (id != lastOpenId) {
-                        lastOpenId = id;
+                        lastOpenId = id; questionInput.Clear();
                         chatName.Text = Text(selected, "title");
                         failure.Text = "";
                         window.WindowState = WindowState.Normal;
                         window.Activate();
+                    }
+                    if (asking) {
+                        string prefix = Path.Combine(directory, "questions-" + id);
+                        var control = ReadJson(prefix + "-control.json");
+                        var answer = ReadJson(prefix + ".json");
+                        if (Text(answer, "revision") != Text(control, "revision")) answer = null;
+                        var messages = answer != null && answer.ContainsKey("messages") ? (System.Collections.ArrayList)answer["messages"] : new System.Collections.ArrayList();
+                        string partial = Text(answer, "partial");
+                        explanation.SetMessages(messages, partial, "questions-" + id);
+                        bool pending = Text(control, "requestId").Length > 0 && Text(control, "requestId") != Text(answer, "requestId");
+                        bool busy = pending || Text(answer, "status") == "generating";
+                        var worker = ReadJson(Path.Combine(dataRoot, "backend", "state.json"));
+                        bool alive = worker != null && ProcessAlive(Convert.ToInt32(worker["pid"]));
+                        failure.Text = Text(answer, "error");
+                        if (!alive) failure.Text = "后台已退出。点击“解释当前聊天”重新启动，再点“重新开始”。";
+                        status.Text = !alive ? "后台已退出" : pending ? "问题已排队，等待后台…" : busy ? "正在回答…" : messages.Count == 0 && partial.Length == 0 ? "基于所选聊天提问；重新开始会读取最新完整回复。" : "";
+                        sendQuestion.IsEnabled = alive && !busy && !submitting && Text(answer, "status") != "error";
+                        restartQuestions.IsEnabled = alive && !submitting;
+                        return;
                     }
                     var latest = ReadJson(Path.Combine(directory, "latest-" + id + ".json"));
                     Dictionary<string, object> state = null;
@@ -182,7 +236,7 @@ class FloatingExplanation {
                         if (!Regex.IsMatch(turn, "^[a-zA-Z0-9_-]{1,100}$")) throw new Exception("回复标识无效。");
                         state = ReadJson(Path.Combine(directory, "result-" + id + "-" + turn + ".json"));
                     }
-                    explanation.SetText(Text(state, "text"));
+                    explanation.SetText(Text(state, "text"), "explanation-" + id);
                     if (state != null) failure.Text = Text(state, "error");
                     string stateStatus = state == null ? Text(selected, "initialStatus") : Text(state, "status");
                     if (state != null && state.ContainsKey("workerPid") && (stateStatus == "queued" || stateStatus == "generating") && !ProcessAlive(Convert.ToInt32(state["workerPid"]))) {
@@ -196,6 +250,26 @@ class FloatingExplanation {
                         case "error": status.Text = "这次解释没有生成成功"; break;
                         case "unavailable": status.Text = "暂时没有找到这段聊天已保存的完整回复。"; break;
                         default: status.Text = "正在读取这段聊天的解释…"; break;
+                    }
+                };
+                explainTab.Click += (sender, ev) => { asking = false; refresh(); };
+                askTab.Click += (sender, ev) => { asking = true; refresh(); questionInput.Focus(); };
+                Func<string, Task> questionAction = async action => {
+                    if (submitting || lastOpenId == null) return;
+                    if (action == "ask" && (!sendQuestion.IsEnabled || String.IsNullOrWhiteSpace(questionInput.Text))) return;
+                    string id = lastOpenId, text = questionInput.Text;
+                    submitting = true; sendQuestion.IsEnabled = false; restartQuestions.IsEnabled = false;
+                    try {
+                        await QuestionRequest(node, dataRoot, id, action, text);
+                        if (!closed && lastOpenId == id) { if (action == "ask" && questionInput.Text == text) questionInput.Clear(); refresh(); }
+                    } catch (Exception error) { if (!closed) failure.Text = error.Message; }
+                    finally { submitting = false; }
+                };
+                sendQuestion.Click += async (sender, ev) => await questionAction("ask");
+                restartQuestions.Click += async (sender, ev) => await questionAction("reset");
+                questionInput.PreviewKeyDown += async (sender, ev) => {
+                    if (ev.Key == System.Windows.Input.Key.Enter && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control) {
+                        ev.Handled = true; await questionAction("ask");
                     }
                 };
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -226,6 +300,7 @@ class FloatingExplanation {
                     File.Delete(Path.Combine(directory, "selection.json"));
                     foreach (string file in Directory.GetFiles(directory, "latest-*.json")) File.Delete(file);
                     foreach (string file in Directory.GetFiles(directory, "result-*.json")) File.Delete(file);
+                    foreach (string file in Directory.GetFiles(directory, "questions-*.json")) File.Delete(file);
                     await explanation.CloseAsync();
                     app.Shutdown();
                 };

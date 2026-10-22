@@ -27,7 +27,7 @@ import { setTimeout as delay2 } from "node:timers/promises";
 import path3 from "node:path";
 
 // src/state.mjs
-import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm } from "node:fs/promises";
+import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path2 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -74,7 +74,20 @@ function explanationFiles(dataRoot2, selection, turnId) {
 }
 async function isWindowOpen(dataRoot2) {
   const directory = path2.join(dataRoot2, "floating");
-  const window = await readJson(path2.join(directory, "window.json"));
+  const file = path2.join(directory, "window.json");
+  let window;
+  try {
+    window = await readJson(file);
+  } catch (error) {
+    if (process.platform === "win32" && error.code === "EPERM") {
+      try {
+        await stat(file);
+      } catch (checkError) {
+        if (checkError.code === "ENOENT") return null;
+      }
+    }
+    throw error;
+  }
   if (!window) return null;
   try {
     process.kill(window.pid, 0);
@@ -96,13 +109,14 @@ async function discardSelection(dataRoot2, selection) {
   const { directory, latest } = explanationFiles(dataRoot2, selection);
   const files = await readdir(directory);
   for (const file of files) {
-    if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-")) await rm(path2.join(directory, file), { force: true });
+    if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path2.join(directory, file), { force: true });
   }
 }
 async function selectChat(dataRoot2, threadId2, title) {
   threadDirectory(dataRoot2, threadId2);
   const file = path2.join(dataRoot2, "floating", "selection.json");
   const previous = await readJson(file);
+  if (previous?.threadId === threadId2 && await isWindowOpen(dataRoot2)) return previous;
   const selection = { threadId: threadId2, title, openId: randomUUID(), initialStatus: "idle" };
   await writeJson(file, selection);
   await discardSelection(dataRoot2, previous);

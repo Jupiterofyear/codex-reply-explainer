@@ -23,6 +23,13 @@ class FakeAppServer {
    var message=json.Deserialize<Dictionary<string,object>>(line);if(!message.ContainsKey("id"))continue;
    object id=message["id"];string method=(string)message["method"];var input=(Dictionary<string,object>)message["params"];
    if(method=="initialize"){Send(new{id=id,result=new{userAgent="fake"}});continue;}
+   if(method=="config/read"){
+    string record=Environment.GetEnvironmentVariable("FAKE_RECORD");
+    if(record!=null)File.AppendAllText(record,json.Serialize(new{method=method,input=input})+"\n");
+    var servers=new Dictionary<string,object>{{"example",new{command="example"}}};
+    if(input.ContainsKey("cwd"))servers["project_only"]=new{command="project-mcp"};
+    Send(new{id=id,result=new{config=new{plugins=new Dictionary<string,object>{{"codex-app-tools@openai-bundled",new{enabled=true}}},mcp_servers=servers}}});continue;
+   }
    if(method=="thread/fork"){
     string branch=Guid.NewGuid().ToString(),file=(string)input["path"];
     if(!file.StartsWith(Path.Combine(Environment.GetEnvironmentVariable("CODEX_HOME"),"sessions")+Path.DirectorySeparatorChar))throw new Exception("Snapshot must be discoverable in private CODEX_HOME/sessions");
@@ -43,10 +50,12 @@ class FakeAppServer {
     Task.Run(async()=>{
      if(snapshot.Contains("CRASH_GENERATION"))Environment.Exit(4);
      while(snapshot.Contains("LOCK_STREAM")&&!File.Exists(Environment.GetEnvironmentVariable("FAKE_STREAM_GATE")))await Task.Delay(20);
-     int delay=snapshot.Contains("WAIT_FOR_CANCEL")&&!snapshot.Contains("NEWER_CONDITION")?20000:50;
+     string question=(string)prompt["text"];
+     int delay=(snapshot.Contains("WAIT_FOR_CANCEL")&&!snapshot.Contains("NEWER_CONDITION"))||question.Contains("WAIT_QUESTION")?20000:50;
      try{await Task.Delay(delay,cancel.Token);}catch(TaskCanceledException){return;}
      if(snapshot.Contains("FAIL_GENERATION")&&!snapshot.Contains("NEWER_CONDITION")){Event("turn/completed",new{threadId=thread,turn=new{id=turn,status="failed",error=new{message="FAKE_FAILURE"}}});return;}
      string answer=snapshot.Contains("NEWER_CONDITION")?"NEWER_EXPLANATION":"FAKE_EXPLANATION";
+     answer=Environment.GetEnvironmentVariable("FAKE_ANSWER")??answer;
      Event("item/agentMessage/delta",new{threadId=thread,turnId=turn,delta=answer});
      try{await Task.Delay(400,cancel.Token);}catch(TaskCanceledException){return;}
      Event("item/completed",new{threadId=thread,turnId=turn,item=new{type="agentMessage",text=answer}});
@@ -57,6 +66,8 @@ class FakeAppServer {
    if(method=="turn/interrupt"){if(jobs.ContainsKey(thread))jobs[thread].Cancel();Send(new{id=id,result=new{}});continue;}
    if(method=="thread/unsubscribe"){
     if(jobs.ContainsKey(thread))jobs[thread].Cancel();branches.Remove(thread);
+    string record=Environment.GetEnvironmentVariable("FAKE_RECORD");
+    if(record!=null)File.AppendAllText(record,json.Serialize(new{method=method,input=input})+"\n");
     Send(new{id=id,result=new{status="unsubscribed"}});Event("thread/closed",new{threadId=thread});continue;
    }
    Send(new{id=id,error=new{code=-32601,message="Unsupported fake method"}});

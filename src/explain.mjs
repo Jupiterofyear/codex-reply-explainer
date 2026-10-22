@@ -36,20 +36,8 @@ export async function explainStop(event, { dataRoot, sourceHome, backend }) {
     await writeJson(files.result, state);
     await writeJson(files.latest, { turnId: event.turn_id });
     if (previous.turnId && previous.turnId !== event.turn_id) await rm(explanationFiles(dataRoot, selection, previous.turnId).result, { force: true });
-    const source = path.resolve(event.transcript_path);
-    relativeRolloutPath(sourceHome, source);
-    const { text, context } = snapshotThroughTurn(await readRolloutHistory(sourceHome, source), event.turn_id);
-    const metadata = JSON.parse(text.split("\n")[0]).payload;
-    if (metadata.id !== event.session_id) throw new Error("聊天记录与当前聊天不一致。");
-    // Give each snapshot its own identity so the warm backend cannot reuse an older import.
-    const snapshotId = randomUUID();
-    const records = text.trimEnd().split("\n").map(JSON.parse);
-    records[0].payload = { ...metadata, id: snapshotId, session_id: metadata.session_id ?? metadata.id, history_mode: "legacy" };
-    delete records[0].payload.history_base;
-    for (const record of records) delete record.ordinal;
-    saved = path.join(backend.home, "sessions", "rollout-" + snapshotId + ".jsonl");
-    await mkdir(path.dirname(saved), { recursive: true });
-    await writeFile(saved, records.map(JSON.stringify).join("\n") + "\n", "utf8");
+    const { saved: snapshot, snapshotId, context, metadata } = await saveSnapshot(event, sourceHome, backend);
+    saved = snapshot;
     await copyRuntimeInputs(sourceHome, backend.home);
     monitor = (async () => {
       while (!finished) {
@@ -85,4 +73,22 @@ export async function explainStop(event, { dataRoot, sourceHome, backend }) {
     else if (finalState) await writeJson(files.result, finalState);
     else await rm(files.result, { force: true });
   }
+}
+
+export async function saveSnapshot(event, sourceHome, backend) {
+    const source = path.resolve(event.transcript_path);
+    relativeRolloutPath(sourceHome, source);
+    const { text, context } = snapshotThroughTurn(await readRolloutHistory(sourceHome, source), event.turn_id);
+    const metadata = JSON.parse(text.split("\n")[0]).payload;
+    if (metadata.id !== event.session_id) throw new Error("聊天记录与当前聊天不一致。");
+    // Give each snapshot its own identity so the warm backend cannot reuse an older import.
+    const snapshotId = randomUUID();
+    const records = text.trimEnd().split("\n").map(JSON.parse);
+    records[0].payload = { ...metadata, id: snapshotId, session_id: metadata.session_id ?? metadata.id, history_mode: "legacy" };
+    delete records[0].payload.history_base;
+    for (const record of records) delete record.ordinal;
+    const saved = path.join(backend.home, "sessions", "rollout-" + snapshotId + ".jsonl");
+    await mkdir(path.dirname(saved), { recursive: true });
+    await writeFile(saved, records.map(JSON.stringify).join("\n") + "\n", "utf8");
+    return { saved, snapshotId, context, metadata };
 }

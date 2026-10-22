@@ -58,6 +58,7 @@ export class AppServerBackend {
   onNotification({ method, params }) {
     const active = this.active;
     if (!active || params?.threadId !== active.threadId) return;
+    if (active.turnId && (params.turnId || params.turn?.id) && (params.turnId || params.turn?.id) !== active.turnId) return;
     if (method === "item/agentMessage/delta") {
       active.firstTextAt ??= Date.now();
       active.text += params.delta;
@@ -71,14 +72,40 @@ export class AppServerBackend {
       else active.reject(new Error(params.turn.error?.message || "解释生成结束：" + params.turn.status));
     }
   }
-  async generate({ threadId, path, context, metadata, prompt, signal, onText }) {
+  async fork({ threadId, path, context, metadata, questions = false }) {
     if (this.active) throw new Error("解释后台正在处理另一条回复。");
-    const startedAt = Date.now();
+    const config = { model_reasoning_effort: context.effort };
+    if (questions) {
+      const effective = (await this.request("config/read", { includeLayers: false, cwd: context.cwd })).config;
+      config["plugins._default.enabled"] = false;
+      for (const name of Object.keys(effective.plugins || {})) config["plugins." + name + ".enabled"] = false;
+      for (const name of Object.keys(effective.mcp_servers || {})) config["mcp_servers." + name + ".enabled"] = false;
+      config["orchestrator.mcp.enabled"] = false;
+      config["features.apps"] = false;
+    }
     const fork = await this.request("thread/fork", { threadId, path, ephemeral: true, excludeTurns: true,
       model: context.model, modelProvider: metadata.model_provider, cwd: context.cwd,
-      config: { model_reasoning_effort: context.effort } });
-    const forkedAt = Date.now();
-    const branchId = fork.thread.id;
+      ...questions ? { sandbox: "read-only", approvalPolicy: "untrusted", approvalsReviewer: "user" } : {}, config });
+    return { id: fork.thread.id, context, fork: { forkedFromId: fork.thread.forkedFromId, path: fork.thread.path,
+      model: fork.model, modelProvider: fork.modelProvider, reasoningEffort: fork.reasoningEffort } };
+  }
+  async discard(branch) {
+    if (this.child.exitCode === null && !this.closing) await this.request("thread/unsubscribe", { threadId: branch.id });
+  }
+  async generate(input) {
+    const startedAt = Date.now();
+    const branch = await this.fork(input);
+    const forkMs = Date.now() - startedAt;
+    try {
+      const result = await this.answer({ ...input, branch });
+      return { ...result, fork: branch.fork, timings: { ...result.timings, forkMs, totalMs: Date.now() - startedAt } };
+    } finally { await this.discard(branch); }
+  }
+  async answer({ branch, prompt, signal, onText }) {
+    if (this.active) throw new Error("后台正在处理另一条回复。");
+    signal?.throwIfAborted();
+    const startedAt = Date.now();
+    const branchId = branch.id, context = branch.context;
     let resolve, reject;
     const completed = new Promise((yes, no) => { resolve = yes; reject = no; });
     const active = { threadId: branchId, text: "", resolve, reject, toolCalls: 0, onText };
@@ -94,7 +121,7 @@ export class AppServerBackend {
     try {
       const starting = this.request("turn/start", { threadId: branchId, turnTrigger: "exec", cwd: context.cwd,
         effort: context.effort, input: [{ type: "text", text: prompt, text_elements: [] }] }).then(turn => {
-          turnId = turn.turn.id; active.turnStartedAt = Date.now();
+          turnId = turn.turn.id; active.turnId = turnId; active.turnStartedAt = Date.now();
           if (signal?.aborted) abort();
           return turn;
         });
@@ -103,13 +130,11 @@ export class AppServerBackend {
       if (!active.lastTokenUsage || active.usageTurnId !== turnId) throw new Error("后台没有返回本次请求的缓存计数。");
       const last = active.lastTokenUsage;
       return { text: active.text.trim(), usage: [{ input_token_count: last.inputTokens, cached_token_count: last.cachedInputTokens, output_token_count: last.outputTokens }], branchId, toolCalls: active.toolCalls,
-        lastTokenUsage: active.lastTokenUsage, timings: { totalMs: Date.now() - startedAt, forkMs: forkedAt - startedAt, turnStartMs: active.turnStartedAt - startedAt, firstTextMs: active.firstTextAt ? active.firstTextAt - startedAt : null },
-        fork: { forkedFromId: fork.thread.forkedFromId, path: fork.thread.path, model: fork.model, modelProvider: fork.modelProvider, reasoningEffort: fork.reasoningEffort } };
+        lastTokenUsage: active.lastTokenUsage, timings: { totalMs: Date.now() - startedAt, turnStartMs: active.turnStartedAt - startedAt, firstTextMs: active.firstTextAt ? active.firstTextAt - startedAt : null } };
     } finally {
       clearTimeout(timeout); signal?.removeEventListener("abort", abort);
       if (interrupt) await interrupt;
-      try { if (this.child.exitCode === null && !this.closing) await this.request("thread/unsubscribe", { threadId: branchId }); }
-      finally { this.active = null; }
+      this.active = null;
     }
   }
   close() {

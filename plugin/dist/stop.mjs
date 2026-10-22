@@ -23,7 +23,7 @@ import { rm as rm2 } from "node:fs/promises";
 import path3 from "node:path";
 
 // src/state.mjs
-import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm } from "node:fs/promises";
+import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path2 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 function threadDirectory(dataRoot, threadId) {
@@ -69,7 +69,20 @@ function explanationFiles(dataRoot, selection, turnId) {
 }
 async function isWindowOpen(dataRoot) {
   const directory = path2.join(dataRoot, "floating");
-  const window = await readJson(path2.join(directory, "window.json"));
+  const file = path2.join(directory, "window.json");
+  let window;
+  try {
+    window = await readJson(file);
+  } catch (error) {
+    if (process.platform === "win32" && error.code === "EPERM") {
+      try {
+        await stat(file);
+      } catch (checkError) {
+        if (checkError.code === "ENOENT") return null;
+      }
+    }
+    throw error;
+  }
   if (!window) return null;
   try {
     process.kill(window.pid, 0);
