@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 Explain Codex's latest reply in plain language in a separate floating window. **Uses Codex's official temporary fork mechanism to inherit conversation context and reuse cached input where possible. Explanations are kept out of the main chat.**
 
-Beta **0.5.0-beta.1** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
+Beta **0.5.0-beta.2** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
 ## Interface preview
 
@@ -35,20 +35,21 @@ The forks are created from different sources: the official composer prediction i
 
 ## Measured input cache reuse
 
-Preserving existing context and model settings lets the server reuse matching input it has already processed. **Two long-conversation tests using the current installation package returned input cache hit rates of 93.6% and 94.7%.**
+Preserving existing context and model settings lets the server reuse matching input it has already processed. **An automatic explanation immediately after a new reply using 0.5.0-beta.2 returned a 93.5% input cache hit rate.** Earlier measurements are retained below for comparison.
 
 | Request | Total input tokens | Cached input tokens | Cache hit rate |
 |---|---:|---:|---:|
-| First explanation | 159,146 | 148,992 | 93.6% |
-| Second explanation | 187,980 | 178,048 | 94.7% |
+| beta.1 first explanation | 159,146 | 148,992 | 93.6% |
+| beta.1 second explanation | 187,980 | 178,048 | 94.7% |
+| beta.2 automatic explanation after a new reply | 156,592 | 146,432 | 93.5% |
 
-A token is a unit used to measure model input and output. The hit rate is calculated as **cached input tokens for this request / total input tokens for this request**, using the server's returned counts. These requests explained two different completed replies, both inheriting the main chat's `gpt-6.1-sol` model and high reasoning effort.
+A token is a unit used to measure model input and output. The hit rate is calculated as **cached input tokens for this request / total input tokens for this request**, using the server's returned counts. These requests inherited the main chat's `gpt-6.1-sol` model and high reasoning effort.
 
 These are local measurements. Actual cache reuse varies with the input, model, and cache retention. Each explanation still generates new content and counts toward the usage of your account or service. See [VALIDATION.md](VALIDATION.md) for counts and test conditions, and the [official prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching) for the caching mechanism.
 
 ## Measured speed
 
-On October 18, 2026, the current installation package explained two completed replies from the same chat. Its timings were compared with the official composer prediction result logs for those same replies:
+On October 18, 2026, version 0.5.0-beta.1 explained two completed replies from the same chat. Its timings were compared with the official composer prediction result logs for those same replies:
 
 | Source reply | Official composer prediction | Complete explanation from this plugin |
 |---|---:|---:|
@@ -56,6 +57,8 @@ On October 18, 2026, the current installation package explained two completed re
 | Reply B: subsequent explanation, backend reused automatically | 18.5 s | 18.2 s |
 
 Official timings run from completion of the main reply to the prediction result being logged. Plugin timings run from submitting the explanation request to the complete result being updated; initial backend startup had already finished before submission. The requests occurred at different times, and neither measurement tracked when pixels appeared on screen. The official feature generates a suggested next message; the plugin generated explanations of 132 and 144 characters in these tests, displaying text progressively as it arrived. See [VALIDATION.md](VALIDATION.md) for detailed timings.
+
+On October 22, 2026, the version containing these fixes automatically started an explanation about 1.1 seconds after a new reply finished. The complete result was updated 24.4 seconds after the main reply, with a 93.5% cache hit rate. No matching official prediction timing was available for this measurement; the table above remains a historical comparison.
 
 **Backend startup, reuse, and shutdown are already handled automatically. No separate switch or configuration is needed.** Actual times vary with context length, the inherited model and reasoning effort, server response, and network conditions.
 
@@ -78,7 +81,7 @@ Codex can check the environment, locate programs, run the installer, and trouble
 
 You can also follow these steps:
 
-1. Extract `codex-reply-explainer-0.5.0-beta.1-plugin-windows-x64.zip` to a folder you intend to keep. Paths containing spaces are supported.
+1. Extract `codex-reply-explainer-0.5.0-beta.2-plugin-windows-x64.zip` to a folder you intend to keep. Paths containing spaces are supported.
 2. Open PowerShell in that folder and run:
 
    ```powershell
@@ -111,10 +114,10 @@ The installer changes only the selected Codex storage directory. It does not sta
 The plugin's interface currently uses Chinese labels. Their English meanings are included below.
 
 1. Open the local chat you want to explain. In the **top-right corner of the chat area, select “+” → “更多工具” (More tools) → “Codex 回复解释” (Codex Reply Explainer)** to open the floating window.
-2. The window selects that chat and generates an explanation of its latest completed reply. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open.
+2. The window selects that chat and generates an explanation of its latest completed reply. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open. If you retain the panel, its “打开悬浮窗” (Open floating window) button reopens the window directly.
 3. Keep the window open. Later completed replies in the same chat update its explanation automatically.
 4. **After switching chats, click “解释当前聊天” (Explain current chat) once at the top of the floating window.** This selects the chat you are currently viewing without reopening the menu. The button temporarily uses the “copy in-app link” shortcut and then restores the clipboard. Keep only one Codex main window open when using this button.
-5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend.
+5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前聊天” (Explain current chat) to restart the backend and generate the explanation again.
 
 Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前聊天” (Explain current chat). The launcher uses the data directory, Codex storage directory, and program paths selected during installation.
 
@@ -122,7 +125,7 @@ If automatic updates are missing, check that the Stop script is trusted, the win
 
 ## Update and uninstall
 
-Close the floating window, extract the new release, and run `install.ps1` again. Keep the same `-DataDirectory` to preserve window geometry. Review the new hook definition and reopen the desktop app. The project does not download updates in the background.
+Close the floating window, extract the new release, and run `install.ps1` again. Keep the same `-DataDirectory` to preserve window geometry. You can extract the new release to a different folder; the installer updates the existing local marketplace registration. Review the new hook definition and reopen the desktop app. The project does not download updates in the background.
 
 To uninstall:
 

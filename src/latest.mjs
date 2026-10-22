@@ -1,21 +1,22 @@
-import { readdir, readFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import { snapshotThroughTurn } from "./explain.mjs";
+import { snapshotThroughTurn, relativeRolloutPath } from "./explain.mjs";
 import { threadDirectory } from "./state.mjs";
+import { readRolloutHistory } from "./history.mjs";
 
 export async function latestReplyEvent(sourceHome, threadId) {
   threadDirectory(sourceHome, threadId);
-  let entries;
+  const database = new DatabaseSync(path.join(sourceHome, "state_5.sqlite"), { readOnly: true });
+  let transcript;
   try {
-    entries = await readdir(path.join(sourceHome, "sessions"), { recursive: true, withFileTypes: true });
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw error;
+    const thread = database.prepare("SELECT rollout_path FROM threads WHERE id = ?").get(threadId);
+    if (!thread) return null;
+    transcript = thread.rollout_path;
+  } finally {
+    database.close();
   }
-  const entry = entries.find(item => item.isFile() && item.name.endsWith("-" + threadId + ".jsonl"));
-  if (!entry) return null;
-  const transcript = path.join(entry.parentPath, entry.name);
-  const text = await readFile(transcript, "utf8");
+  relativeRolloutPath(sourceHome, transcript);
+  const text = await readRolloutHistory(sourceHome, transcript);
   const rows = text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter(Boolean).map(line => JSON.parse(line));
   if (rows[0].payload.id !== threadId) throw new Error("聊天记录与当前聊天不一致。");
   const completed = rows.findLast(item => item.type === "event_msg" && item.payload.type === "task_complete");

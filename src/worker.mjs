@@ -1,5 +1,6 @@
 import { mkdir, rename, readFile, rm, symlink, unlink } from "node:fs/promises";
 import path from "node:path";
+import { writeFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { AppServerBackend } from "./backend.mjs";
 import { explainStop, copyRuntimeInputs } from "./explain.mjs";
@@ -8,6 +9,7 @@ import { workerFiles } from "./worker-client.mjs";
 
 const [dataRoot, sourceHome, cliPath] = process.argv.slice(2);
 const files = workerFiles(dataRoot);
+process.on("exit", code => writeFileSync(path.join(dataRoot, "worker-exit.json"), JSON.stringify({ pid: process.pid, code, at: new Date().toISOString() }) + "\n"));
 const home = path.join(files.directory, "home");
 const cache = path.join(home, "plugins/cache");
 const processing = path.join(files.directory, "processing.json");
@@ -16,6 +18,7 @@ try {
   // Only this worker's private directory is removed; detach its installed-code link first.
   try { await unlink(cache); } catch (error) { if (error.code !== "ENOENT") throw error; }
   await rm(files.directory, { recursive: true, force: true });
+  await rm(path.join(dataRoot, "runs"), { recursive: true, force: true });
   await mkdir(path.join(home, "plugins"), { recursive: true });
   await mkdir(path.join(files.directory, "tmp"));
   await writeJson(files.state, { pid: process.pid, status: "starting" });

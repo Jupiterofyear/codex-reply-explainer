@@ -3,7 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { threadDirectory, writeJson, selectChat, isWindowOpen } from "./state.mjs";
+import { setTimeout as delay } from "node:timers/promises";
+import { threadDirectory, selectChat, isWindowOpen } from "./state.mjs";
 
 export function readThreadName(sourceHome, threadId) {
   threadDirectory(sourceHome, threadId);
@@ -28,7 +29,12 @@ export async function openFloatingWindow({ root, dataRoot, sourceHome, threadId,
     windowsHide: false, detached: true, stdio: "ignore"
   });
   await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
-  await writeJson(path.join(directory, "window.json"), { pid: child.pid });
   child.unref();
+  const deadline = Date.now() + 10000;
+  while (!await isWindowOpen(dataRoot)) {
+    if (child.exitCode !== null) throw new Error("悬浮窗启动失败：" + child.exitCode);
+    if (Date.now() >= deadline) throw new Error("悬浮窗启动超时。");
+    await delay(50);
+  }
   await ensureWorker({ root, dataRoot, sourceHome });
 }

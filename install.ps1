@@ -59,6 +59,13 @@ try {
     $env:TEMP = Join-Path $root '.local/tmp'
     $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
+    $marketplaces = & $CodexPath plugin marketplace list --json
+    if ($LASTEXITCODE -ne 0) { throw 'Marketplace listing failed.' }
+    $registered = @(($marketplaces | Out-String | ConvertFrom-Json).marketplaces | Where-Object { $_.name -eq 'reply-explainer-preview' })
+    if ($registered.Count -gt 0 -and [IO.Path]::GetFullPath($registered[0].root) -ne [IO.Path]::GetFullPath($stage)) {
+        & $CodexPath plugin marketplace remove 'reply-explainer-preview' --json
+        if ($LASTEXITCODE -ne 0) { throw 'Previous marketplace registration could not be replaced.' }
+    }
     & $CodexPath plugin marketplace add $stage --json
     if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed.' }
     & $CodexPath plugin add 'reply-explainer@reply-explainer-preview' --json

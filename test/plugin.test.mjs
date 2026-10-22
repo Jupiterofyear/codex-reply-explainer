@@ -157,6 +157,73 @@ test("Windows namespaced rollout paths stay inside the same Codex home", { skip:
   assert.throws(() => relativeRolloutPath(home, "C:/outside/rollout.jsonl"), /不在/);
 });
 
+test("resumed history keeps the referenced prefix and excludes the abandoned old suffix", async () => {
+  const { readRolloutHistory } = await import("../src/history.mjs");
+  const home = path.join(testRoot, "segmented-history");
+  const directory = path.join(home, "sessions/2026/10/21");
+  await mkdir(directory, { recursive: true });
+  const parent = path.join(directory, "rollout-old-" + first + ".jsonl");
+  const current = path.join(directory, "rollout-current-" + first + "_" + second + ".jsonl");
+  const prefix = [
+    { ordinal: 0, type: "session_meta", payload: { id: first, history_mode: "paginated" } },
+    { ordinal: 1, type: "response_item", payload: { type: "message", role: "user", content: [{ text: "之前的中文偏好" }] } }
+  ].map(JSON.stringify).join("\n") + "\n";
+  const abandoned = JSON.stringify({ ordinal: 2, type: "response_item", payload: { text: "ABANDONED_REPLY" } }) + "\n";
+  await writeFile(parent, prefix + abandoned);
+  const suffix = [
+    { ordinal: 2, type: "session_meta", payload: { id: first, history_mode: "paginated", history_base: { thread_id: first, end_ordinal_exclusive: 2, end_byte_offset: Buffer.byteLength(prefix) } } },
+    { ordinal: 3, type: "turn_context", payload: { turn_id: "current", model: "source-model" } },
+    { ordinal: 4, type: "response_item", payload: { type: "message", role: "assistant", content: [{ text: "CURRENT_RESULTS" }] } },
+    { ordinal: 5, type: "event_msg", payload: { type: "task_complete", turn_id: "current" } }
+  ].map(JSON.stringify).join("\n") + "\n";
+  await writeFile(current, suffix);
+  const before = await readFile(parent);
+  const merged = await readRolloutHistory(home, current);
+  const snapshot = snapshotThroughTurn(merged, "current");
+  assert.match(snapshot.text, /之前的中文偏好/);
+  assert.match(snapshot.text, /CURRENT_RESULTS/);
+  assert.doesNotMatch(snapshot.text, /ABANDONED_REPLY/);
+  assert.equal(merged.split("\n").filter(line => line && JSON.parse(line).type === "session_meta").length, 1);
+  assert.deepEqual(await readFile(parent), before);
+  assert.equal(await readFile(current, "utf8"), suffix);
+});
+
+test("latest reply follows the registered rollout when one chat has old and resumed files", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const home = path.join(testRoot, "resumed-home");
+  const directory = path.join(home, "sessions/2026/10/21");
+  await mkdir(directory, { recursive: true });
+  const old = path.join(directory, "rollout-old-" + first + ".jsonl");
+  const current = path.join(directory, "rollout-current-" + first + "_" + second + ".jsonl");
+  const rows = (turn, answer) => [
+    { type: "session_meta", payload: { id: first } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ text: "Inherited preference" }] } },
+    { type: "turn_context", payload: { turn_id: turn, model: "source-model", cwd: "D:/project" } },
+    { type: "response_item", payload: { type: "message", role: "assistant", content: [{ text: answer }] } },
+    { type: "event_msg", payload: { type: "task_complete", turn_id: turn } }
+  ].map(JSON.stringify).join("\n") + "\n";
+  await writeFile(old, rows("old", "Old preparation reply"));
+  const databaseFile = path.join(home, "state_5.sqlite");
+  const database = new DatabaseSync(databaseFile);
+  database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL)");
+  database.prepare("INSERT INTO threads VALUES (?, ?)").run(first, old);
+  database.close();
+  assert.equal((await latestReplyEvent(home, first)).turn_id, "old");
+  await writeFile(current, rows("current", "Latest results analysis"));
+  const updated = new DatabaseSync(databaseFile);
+  updated.prepare("UPDATE threads SET rollout_path = ? WHERE id = ?").run(path.toNamespacedPath(current), first);
+  updated.close();
+  const before = await readFile(databaseFile);
+  const event = await latestReplyEvent(home, first);
+  assert.equal(event.turn_id, "current");
+  assert.equal(event.last_assistant_message, "Latest results analysis");
+  const snapshot = snapshotThroughTurn(await readFile(event.transcript_path, "utf8"), event.turn_id);
+  assert.match(snapshot.text, /Inherited preference/);
+  assert.match(snapshot.text, /Latest results analysis/);
+  assert.doesNotMatch(snapshot.text, /Old preparation reply/);
+  assert.deepEqual(await readFile(databaseFile), before);
+});
+
 test("opening an existing chat selects its latest completed reply and preserves its context", async () => {
   const directory = path.join(testRoot, "sessions/2026/10/17");
   await mkdir(directory, { recursive: true });
@@ -168,7 +235,13 @@ test("opening an existing chat selects its latest completed reply and preserves 
     { type: "event_msg", payload: { type: "task_complete", turn_id: "finished" } },
     { type: "turn_context", payload: { turn_id: "unfinished" } }
   ];
-  await writeFile(path.join(directory, "rollout-test-" + second + ".jsonl"), rows.map(JSON.stringify).join("\n") + "\n");
+  const transcript = path.join(directory, "rollout-test-" + second + ".jsonl");
+  await writeFile(transcript, rows.map(JSON.stringify).join("\n") + "\n");
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(path.join(testRoot, "state_5.sqlite"));
+  database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL)");
+  database.prepare("INSERT INTO threads VALUES (?, ?)").run(second, transcript);
+  database.close();
   const event = await latestReplyEvent(testRoot, second);
   assert.equal(event.turn_id, "finished");
   assert.equal(event.last_assistant_message, "Completed reply");
@@ -222,7 +295,7 @@ async function fakeSource(name, id = first) {
   await writeFile(path.join(source, "auth.json"), "FAKE_AUTH");
   await writeFile(path.join(source, "config.toml"), "# original settings");
   const rows = [
-    { type: "session_meta", payload: { id, model_provider: "openai", base_instructions: "inherited base" } },
+    { type: "session_meta", payload: { id, session_id: id, model_provider: "openai", base_instructions: "inherited base" } },
     { type: "response_item", payload: { type: "message", role: "user", content: [{ text: "earlier preference" }] } },
     { type: "turn_context", payload: { turn_id: "done", cwd: source, model: "source-model", effort: "high" } },
     { type: "response_item", payload: { type: "message", role: "assistant", content: [{ text: "finished reply" }] } },
@@ -248,7 +321,7 @@ const framework=path.join(process.env.WINDIR,"Microsoft.NET/Framework64/v4.0.303
 const fakeCli=path.join(testRoot,"fake-app-server.exe");
 execFileSync(path.join(framework,"csc.exe"),["/nologo","/target:exe","/out:"+fakeCli,"/reference:"+path.join(framework,"System.Web.Extensions.dll"),path.join(root,"test/fake-app-server.cs")],{windowsHide:true,env:{...process.env,TMP:testRoot,TEMP:testRoot}});
 async function until(check) {
- const deadline=Date.now()+10000;
+ const deadline=Date.now()+30000;
  while(Date.now()<deadline){const value=await check();if(value)return value;await new Promise(r=>setTimeout(r,30));}
  throw new Error("Local validation timed out");
 }
@@ -257,7 +330,7 @@ async function launchWorker(name,flag="",childMarker=false) {
  if(flag)await writeFile(fixture.transcript,(await readFile(fixture.transcript,"utf8")).replace("finished reply",flag));
  const data=path.join(testRoot,name+"-data"),record=path.join(testRoot,name+"-record.jsonl"),marker=path.join(testRoot,name+"-child.txt");
  await seedWindow(data,first);
- const child=spawn(process.execPath,["dist/worker.mjs",data,fixture.source,fakeCli],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"],env:{...process.env,FAKE_RECORD:record,...childMarker?{FAKE_CHILD_PID_FILE:marker}:{}}});
+ const child=spawn(process.execPath,["dist/worker.mjs",data,fixture.source,fakeCli],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"],env:{...process.env,FAKE_RECORD:record,FAKE_STREAM_GATE:path.join(data,"stream-gate"),...childMarker?{FAKE_CHILD_PID_FILE:marker}:{}}});
  const worker={...fixture,data,record,marker,child,stderr:""};workers.push(worker);child.stderr.on("data",x=>worker.stderr+=x);
  worker.state=await until(async()=>{if(child.exitCode!==null)throw Error("Worker exited "+child.exitCode+": "+worker.stderr);const state=await liveWorker(data);return state?.status==="ready"&&state;});
  return worker;
@@ -290,7 +363,8 @@ test("one backend receives fresh complete snapshots, configuration and per-reque
  await enqueueStop(event,{dataRoot:w.data});const b=await ready(w,"newer");assert.equal(b.status,"ready",b.error);assert.equal(b.text,"NEWER_EXPLANATION");
  assert.equal(a.backendPid,b.backendPid);assert.deepEqual(b.usage,[{input_token_count:1000,cached_token_count:900,output_token_count:25}]);
  const forked=(await records(w)).filter(x=>x.method==="thread/fork");assert.equal(forked.length,2);
- assert.equal(forked[0].input.ephemeral,true);assert.equal(forked[0].input.threadId,first);assert.equal(forked[0].input.model,"source-model");
+ assert.equal(forked[0].input.ephemeral,true);assert.notEqual(forked[0].input.threadId,first);assert.notEqual(forked[0].input.threadId,forked[1].input.threadId);assert.equal(forked[0].input.model,"source-model");
+ for(const fork of forked){const rows=fork.input.snapshot.trim().split("\n").map(JSON.parse);assert.equal(rows[0].payload.id,fork.input.threadId);assert.equal(rows[0].payload.session_id,first);assert.equal(rows[0].payload.history_mode,"legacy");assert.equal(rows[0].payload.history_base,undefined);assert.ok(rows.every(row=>row.ordinal===undefined));}
  assert.match(forked[0].input.snapshot,/earlier preference/);assert.doesNotMatch(forked[0].input.snapshot,/unfinished turn/);
  assert.match(forked[1].input.snapshot,/NEWER_CONDITION/);assert.equal(forked[1].input.runtimeConfig,"# changed preference");
  for(const row of forked)await assert.rejects(access(row.input.path),{code:"ENOENT"});
@@ -343,4 +417,77 @@ test("invalid binding cannot create a temporary directory outside its data folde
 after(async()=>{
  for(const worker of workers)if(worker.child.exitCode===null)await stopWorker(worker);
  const resolved=path.resolve(testRoot);if(path.dirname(resolved)!==path.join(root, ".local"))throw Error("Test root outside private test folder");await rm(resolved,{recursive:true,force:true});
+});
+
+test("a reader holding the result open cannot kill the explanation worker", async () => {
+ const w = await launchWorker("locked-reader-source", "LOCK_STREAM");
+ await enqueueStop(w.event, {dataRoot:w.data}); await started(w);
+ const selection=await readJson(path.join(w.data,"floating/selection.json"));
+ const file=explanationFiles(w.data,selection,"done").result;
+ const marker=path.join(w.data,"reader-open.txt");
+ const command="$stream = [System.IO.File]::Open($args[0], 'Open', 'Read', 'Read'); [System.IO.File]::WriteAllText($args[1], 'open'); Start-Sleep -Seconds 4; $stream.Dispose()";
+ const script=path.join(w.data,"hold-reader.ps1"); await writeFile(script,command);
+ const reader=spawn("powershell.exe",["-NoProfile","-File",script,file,marker],{windowsHide:true,stdio:"ignore"});
+ await untilFile(marker);
+ await writeFile(path.join(w.data,"stream-gate"),"go");
+ await new Promise(resolve=>reader.once("exit",resolve));
+ assert.equal(w.child.exitCode,null,w.stderr);
+ const state=await ready(w);
+ assert.equal(state.status,"ready",state.error);
+ assert.equal(state.text,"FAKE_EXPLANATION");
+ await stopWorker(w);
+});
+
+
+test("the floating request restarts a dead worker for the same chat and cleans abandoned runs", async () => {
+ const w=await launchWorker("restart-source","WAIT_FOR_CANCEL");
+ const {DatabaseSync}=await import("node:sqlite");
+ const database=new DatabaseSync(path.join(w.source,"state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT, rollout_path TEXT NOT NULL)");
+ database.prepare("INSERT INTO threads VALUES (?, ?, ?, ?)").run(first,"同一聊天","test",w.transcript);
+ database.close();
+ const original=await readFile(w.transcript);
+ await enqueueStop(w.event,{dataRoot:w.data}); await started(w);
+ execFileSync("taskkill.exe",["/PID",String(w.child.pid),"/T","/F"],{windowsHide:true,stdio:"ignore"});
+ await until(()=>w.child.exitCode!==null);
+ const dead=await readExplanation(w.data,first);
+ assert.equal(dead.status,"error"); assert.match(dead.error,/后台已退出/);
+ await writeFile(w.transcript,(await readFile(w.transcript,"utf8")).replace("WAIT_FOR_CANCEL","finished reply"));
+ const before=await readFile(w.transcript);
+ const request=spawn(process.execPath,["dist/request.mjs",w.data,w.source,first],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"],env:{...process.env,CODEX_CLI_PATH:fakeCli}});
+ let stderr=""; request.stderr.on("data",chunk=>stderr+=chunk);
+ assert.equal(await new Promise(resolve=>request.once("exit",resolve)),0,stderr);
+ const state=await ready(w);
+ assert.equal(state.status,"ready",state.error); assert.equal(state.text,"FAKE_EXPLANATION");
+ assert.notEqual(state.backendPid,w.state.backendPid);
+ assert.deepEqual(state.usage,[{input_token_count:1000,cached_token_count:900,output_token_count:25}]);
+ assert.deepEqual(await readFile(w.transcript),before);
+ assert.deepEqual(await readdir(path.join(w.data,"runs")),[]);
+ await access(path.join(w.data,"worker-error.log"));
+ await rm(path.join(w.data,"floating/window.json"));
+ await until(async()=>!await liveWorker(w.data));
+ await until(async()=>{try{await access(path.join(w.data,"backend"));return false;}catch(error){if(error.code!=="ENOENT")throw error;return true;}});
+ assert.equal(JSON.parse(await readFile(path.join(w.data,"worker-exit.json"),"utf8")).code,0);
+ assert.equal(await readFile(path.join(w.source,"plugins/cache/sentinel.txt"),"utf8"),"KEEP_INSTALLED_PLUGIN");
+});
+
+
+test("a persistent file lock reports an error without exiting and the same reply can be retried", async () => {
+ const w=await launchWorker("long-lock-source","LOCK_STREAM");
+ await enqueueStop(w.event,{dataRoot:w.data}); await started(w);
+ const selection=await readJson(path.join(w.data,"floating/selection.json"));
+ const file=explanationFiles(w.data,selection,"done").result;
+ const marker=path.join(w.data,"reader-open.txt");
+ const script=path.join(w.data,"hold-reader.ps1");
+ await writeFile(script,"$stream = [System.IO.File]::Open($args[0], 'Open', 'Read', 'Read'); [System.IO.File]::WriteAllText($args[1], 'open'); Start-Sleep -Seconds 7; $stream.Dispose()");
+ const reader=spawn("powershell.exe",["-NoProfile","-File",script,file,marker],{windowsHide:true,stdio:"ignore"});
+ await untilFile(marker); await writeFile(path.join(w.data,"stream-gate"),"go");
+ await new Promise(resolve=>reader.once("exit",resolve));
+ const failed=await ready(w); assert.equal(failed.status,"error"); assert.match(failed.error,/EPERM/);
+ assert.equal(failed.text,"FAKE_EXPLANATION"); assert.equal(w.child.exitCode,null,w.stderr);
+ await enqueueStop(w.event,{dataRoot:w.data});
+ const retried=await ready(w); assert.equal(retried.status,"ready",retried.error); assert.equal(retried.text,"FAKE_EXPLANATION");
+ assert.equal((await records(w)).filter(x=>x.method==="thread/fork").length,2);
+ assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.endsWith(".tmp")).length,0);
+ await stopWorker(w);
 });

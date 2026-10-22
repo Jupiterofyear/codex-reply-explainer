@@ -6,6 +6,7 @@ body{margin:0;padding:24px;line-height:1.65}header{display:flex;align-items:cent
 .dot{width:7px;height:7px;border-radius:50%;background:#7c9682}#status{margin:18px 0 10px;color:var(--color-text-secondary,#777);font-size:12px}
 #explanation{font-size:17px;overflow-wrap:anywhere;margin:0;max-width:44em}#error{color:#ad5142;font-size:14px}
 @media(prefers-color-scheme:dark){:root{color:var(--color-text-primary,#ecebe7);background:var(--color-background-primary,#242424)}}
+#reopen{margin:18px 0 0;padding:10px 20px;border:1px solid #dcdcdc;border-radius:24px;background:transparent;color:inherit;font:inherit;cursor:pointer}#reopen:disabled{opacity:.5}
 /* MARKDOWN_STYLE */
-</style></head><body><header><span class="dot"></span>Codex 回复解释</header><p id="floating-note" hidden>悬浮小窗已打开。切换聊天后，点击小窗顶部的“解释当前聊天”。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
+</style></head><body><header><span class="dot"></span>Codex 回复解释</header><button id="reopen" type="button">打开悬浮窗</button><p id="floating-note" hidden>悬浮小窗已打开。切换聊天后，点击小窗顶部的“解释当前聊天”。关闭小窗后，可以用上方按钮重新打开。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
 <script type="module">/* PANEL_SCRIPT */</script></body></html>

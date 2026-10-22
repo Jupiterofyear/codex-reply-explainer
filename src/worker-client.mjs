@@ -1,5 +1,6 @@
 import { loadSettings } from "./settings.mjs";
 import { spawn } from "node:child_process";
+import { openSync, closeSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
@@ -17,9 +18,11 @@ export async function liveWorker(dataRoot) {
 export async function ensureWorker({ root, dataRoot, sourceHome }) {
   if (await liveWorker(dataRoot)) return;
   const settings = await loadSettings(root);
-  const child = spawn(process.execPath, [path.join(root, "dist/worker.mjs"), dataRoot, sourceHome, settings.cliPath], {
-    cwd: root, env: process.env, windowsHide: true, detached: true, stdio: "ignore"
-  });
+  const diagnostics = openSync(path.join(dataRoot, "worker-error.log"), "w");
+  let child;
+  try { child = spawn(process.execPath, [path.join(root, "dist/worker.mjs"), dataRoot, sourceHome, settings.cliPath], {
+    cwd: root, env: process.env, windowsHide: true, detached: true, stdio: ["ignore", "ignore", diagnostics]
+  }); } finally { closeSync(diagnostics); }
   await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
   child.unref();
   const deadline = Date.now() + 10000;
@@ -38,13 +41,13 @@ export async function enqueueStop(event, { dataRoot }) {
   const selection = await activeSelection(dataRoot);
   if (selection?.threadId !== event.session_id) return;
   const previous = await readExplanation(dataRoot, event.session_id);
-  if (previous.turnId === event.turn_id) return;
+  if (previous.turnId === event.turn_id && previous.status !== "error") return;
   const files = explanationFiles(dataRoot, selection, event.turn_id);
   const worker = await liveWorker(dataRoot);
-  await writeJson(files.result, { threadId: event.session_id, turnId: event.turn_id, status: worker ? "queued" : "error",
+  await writeJson(files.result, { threadId: event.session_id, turnId: event.turn_id, status: worker ? "queued" : "error", workerPid: worker?.pid,
     ...worker ? {} : { error: "解释后台已结束，请重新打开小窗。" }, startedAt: new Date().toISOString() });
   await writeJson(files.latest, { turnId: event.turn_id });
-  if (previous.turnId) await rm(explanationFiles(dataRoot, selection, previous.turnId).result, { force: true });
+  if (previous.turnId && previous.turnId !== event.turn_id) await rm(explanationFiles(dataRoot, selection, previous.turnId).result, { force: true });
   if (!worker) return;
   await writeJson(workerFiles(dataRoot).pending, { openId: selection.openId, event });
 }

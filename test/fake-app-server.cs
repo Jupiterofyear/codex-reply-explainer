@@ -42,6 +42,7 @@ class FakeAppServer {
     Event("thread/tokenUsage/updated",new{threadId=thread,turnId="inherited",tokenUsage=new{last=new{inputTokens=999999,cachedInputTokens=999998,outputTokens=8888}}});
     Task.Run(async()=>{
      if(snapshot.Contains("CRASH_GENERATION"))Environment.Exit(4);
+     while(snapshot.Contains("LOCK_STREAM")&&!File.Exists(Environment.GetEnvironmentVariable("FAKE_STREAM_GATE")))await Task.Delay(20);
      int delay=snapshot.Contains("WAIT_FOR_CANCEL")&&!snapshot.Contains("NEWER_CONDITION")?20000:50;
      try{await Task.Delay(delay,cancel.Token);}catch(TaskCanceledException){return;}
      if(snapshot.Contains("FAIL_GENERATION")&&!snapshot.Contains("NEWER_CONDITION")){Event("turn/completed",new{threadId=thread,turn=new{id=turn,status="failed",error=new{message="FAKE_FAILURE"}}});return;}

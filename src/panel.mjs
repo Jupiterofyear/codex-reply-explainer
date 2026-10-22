@@ -2,7 +2,7 @@ import { App, applyDocumentTheme, applyHostStyleVariables } from "@modelcontextp
 
 import { renderMarkdown } from "./markdown.mjs";
 
-const app = new App({ name: "reply-explainer", version: "0.5.0-beta.1" }, {});
+const app = new App({ name: "reply-explainer", version: "0.5.0-beta.2" }, {});
 const status = document.querySelector("#status");
 const text = document.querySelector("#explanation");
 const error = document.querySelector("#error");
@@ -34,5 +34,11 @@ async function refresh(name = "reply_explainer.open") {
     error.textContent = failure.message;
   }
 }
+document.querySelector("#reopen").onclick = async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try { await refresh("reply_explainer.open_floating"); }
+  finally { button.disabled = false; }
+};
 await refresh("reply_explainer.explain_latest");
 setInterval(() => refresh(), 2000);

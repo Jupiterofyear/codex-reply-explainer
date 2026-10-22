@@ -1,12 +1,14 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { readThreadName } from "./floating.mjs";
 import { latestReplyEvent } from "./latest.mjs";
-import { enqueueStop } from "./worker-client.mjs";
+import { ensureWorker, enqueueStop } from "./worker-client.mjs";
 import { selectChat, writeJson, isCurrentSelection, isWindowOpen, discardSelection, readJson } from "./state.mjs";
 
 const [dataRoot, sourceHome, threadId] = process.argv.slice(2);
 if (await isWindowOpen(dataRoot)) {
+  await ensureWorker({ root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
   const title = readThreadName(sourceHome, threadId);
   const selection = await selectChat(dataRoot, threadId, title);
   try {

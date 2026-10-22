@@ -27,6 +27,10 @@ class FloatingExplanation {
         } catch (FileNotFoundException) { return null; }
         catch (DirectoryNotFoundException) { return null; }
     }
+    static bool ProcessAlive(int pid) {
+        try { using (var process = Process.GetProcessById(pid)) return !process.HasExited; }
+        catch (ArgumentException) { return false; }
+    }
     static string Text(Dictionary<string, object> value, string key) {
         return value != null && value.ContainsKey(key) ? value[key] as string ?? "" : "";
     }
@@ -93,6 +97,8 @@ class FloatingExplanation {
         using (var mutex = new Mutex(true, "Local\\CodexReplyExplainer-" + digest, out created)) {
             if (!created) return 0;
             try {
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "window.json"), json.Serialize(new { pid = Process.GetCurrentProcess().Id }), new UTF8Encoding(false));
                 var window = (Window)XamlReader.Parse(@"<Window xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"" xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"" xmlns:shell=""clr-namespace:System.Windows.Shell;assembly=PresentationFramework""
  Title=""Codex 回复解释"" Width=""420"" Height=""860"" MinWidth=""360"" MinHeight=""270"" Topmost=""True"" ShowActivated=""False""
  FontFamily=""Microsoft YaHei UI"" Foreground=""#202020"" Background=""White"" WindowStyle=""None"" WindowStartupLocation=""Manual"" ResizeMode=""CanResize"" UseLayoutRounding=""True"" TextOptions.TextFormattingMode=""Display"" TextOptions.TextRenderingMode=""ClearType"">
@@ -178,7 +184,12 @@ class FloatingExplanation {
                     }
                     explanation.SetText(Text(state, "text"));
                     if (state != null) failure.Text = Text(state, "error");
-                    switch (state == null ? Text(selected, "initialStatus") : Text(state, "status")) {
+                    string stateStatus = state == null ? Text(selected, "initialStatus") : Text(state, "status");
+                    if (state != null && state.ContainsKey("workerPid") && (stateStatus == "queued" || stateStatus == "generating") && !ProcessAlive(Convert.ToInt32(state["workerPid"]))) {
+                        stateStatus = "error";
+                        failure.Text = "解释后台已退出。点击“解释当前聊天”可重新生成。";
+                    }
+                    switch (stateStatus) {
                         case "ready": status.Text = ""; break;
                         case "queued":
                         case "generating": status.Text = "正在生成解释…"; break;

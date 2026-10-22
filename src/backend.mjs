@@ -42,7 +42,7 @@ export class AppServerBackend {
     });
     this.stderr = "";
     this.child.stderr.on("data", chunk => { this.stderr = (this.stderr + chunk).slice(-8192); });
-    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.1" }, capabilities: { experimentalApi: true } });
+    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.2" }, capabilities: { experimentalApi: true } });
     this.write({ method: "initialized", params: {} });
     return this;
   }

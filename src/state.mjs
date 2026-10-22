@@ -1,6 +1,7 @@
 import { readFile, writeFile, rename, mkdir, readdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 export function threadDirectory(dataRoot, threadId) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId)) throw new Error("当前聊天标识无效。");
@@ -14,7 +15,17 @@ export async function writeJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = file + "." + process.pid + ".tmp";
   await writeFile(temporary, JSON.stringify(value, null, 2) + "\n", "utf8");
-  await rename(temporary, file);
+  // Windows may briefly keep the displayed file open without allowing replacement.
+  const deadline = Date.now() + 5000;
+  try {
+    while (true) {
+      try { await rename(temporary, file); return; }
+      catch (error) {
+        if (process.platform !== "win32" || error.code !== "EPERM" || Date.now() >= deadline) throw error;
+        await delay(25);
+      }
+    }
+  } finally { await rm(temporary, { force: true }); }
 }
 export function explanationFiles(dataRoot, selection, turnId) {
   threadDirectory(dataRoot, selection.openId);
@@ -61,5 +72,14 @@ export async function readExplanation(dataRoot, threadId) {
   if (selection?.threadId !== threadId) return { threadId, status: "idle" };
   const latest = await readJson(explanationFiles(dataRoot, selection).latest);
   if (!latest) return { threadId, status: selection.initialStatus || "idle" };
-  return await readJson(explanationFiles(dataRoot, selection, latest.turnId).result) || { threadId, status: "idle" };
+  const state = await readJson(explanationFiles(dataRoot, selection, latest.turnId).result) || { threadId, status: "idle" };
+  if (state.workerPid && ["queued", "generating"].includes(state.status) && !isProcessRunning(state.workerPid)) {
+    return { ...state, status: "error", error: "解释后台已退出。点击“解释当前聊天”可重新生成。" };
+  }
+  return state;
+}
+
+export function isProcessRunning(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { if (error.code === "ESRCH") return false; throw error; }
 }
