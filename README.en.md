@@ -71,6 +71,8 @@ On October 22, 2026, the version containing these fixes automatically started an
 
 ## Install with help from your own Codex
 
+**New users can install the latest release directly; no older version is required.** Open [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases) and download the latest beta asset ending in `-plugin-windows-x64.zip`. Existing users should follow “Update an existing installation” below.
+
 Open a local Codex chat that can access files on your computer. Send it this project's page URL together with the following request:
 
 > Please install this project's Codex Reply Explainer (Codex 回复解释) plugin for me. First read the README, PRIVACY.md, and install.ps1, and check the Windows, Node.js, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP from Releases, extract it to a permanent folder I choose, and run the installer as described in the README. Preserve my existing Codex settings. Inspect the Stop script that runs after replies and guide me through trusting it. After installation, verify plugin registration, the opening menu, and automatic explanations. Give me specific instructions for any steps I need to perform. Do not modify the desktop app's source code.
@@ -125,7 +127,25 @@ If automatic updates are missing, check that the Stop script is trusted, the win
 
 ## Update and uninstall
 
-Close the floating window, extract the new release, and run `install.ps1` again. Keep the same `-DataDirectory` to preserve window geometry. You can extract the new release to a different folder; the installer updates the existing local marketplace registration. Review the new hook definition and reopen the desktop app. The project does not download updates in the background.
+### Update an existing installation
+
+**Users of this project's public beta can install the latest version directly without uninstalling first.** Updating from beta.1 to beta.2 has been verified, including installation from a different folder. Updates are manual; the plugin does not download new versions in the background.
+
+Send the project URL and this request to your own Codex:
+
+> Please update my installed Codex Reply Explainer to the latest beta. Read the new README and install.ps1 first. Read .local/installation.json in the previous extracted folder to identify my existing Codex storage and explanation data directories. Close the floating window, extract the latest Windows x64 plugin ZIP to a permanent new folder, and run its installer with the original CodexHome and DataDirectory. Locate the current codex.exe. Preserve my window size and position. Check whether the Stop script needs to be trusted again, guide me through restarting Codex, and verify the installed version, opening the window, and automatic explanations after new replies. Do not modify the desktop app's source code.
+
+To update manually:
+
+1. Close the floating window. Download and extract the latest Windows x64 plugin ZIP.
+2. Read `.local/installation.json` in the previous extracted folder. Its `codexHome` and `dataDirectory` fields identify your existing directories.
+3. Run `install.ps1` from the new folder with `-CodexHome` and `-DataDirectory` set to those original directories. Supply the current `-CodexPath` if Codex cannot be found. The installer updates this plugin's registration and runtime copy.
+4. Check `/hooks` in the CLI using the same Codex storage directory. If the Stop script definition changed, inspect and trust it again. Restart the Codex desktop app and open the explanation window.
+5. Confirm that the window size and position are restored and that the next completed reply in the selected chat updates the explanation automatically.
+
+**When installing from a new folder, explicitly pass the original `-DataDirectory` to keep your window settings.** Otherwise, the installer uses `.local/data` inside the new folder. If your original data directory is inside the old extracted folder, keep that directory after updating.
+
+### Uninstall
 
 To uninstall:
 

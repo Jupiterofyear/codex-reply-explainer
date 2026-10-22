@@ -71,6 +71,8 @@ token 是模型计算文本用量的单位。命中率按服务器返回的**本
 
 ## 安装：交给你自己的 Codex
 
+**首次安装可以直接使用最新版，无需先安装旧版。** 前往 [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases)，下载最新测试版的 Windows x64 插件 ZIP；安装请选文件名以 `-plugin-windows-x64.zip` 结尾的包。已有用户请按下方“更新已有安装”操作。
+
 在能访问本机文件的本地 Codex 聊天中，发送本项目页面链接，并附上这段话：
 
 > 请帮我安装这个项目的 Codex Reply Explainer（Codex 回复解释）插件。先阅读 README、PRIVACY.md 和 install.ps1，检查 Windows、Node.js、Codex 和 WebView2 是否满足要求。从 Releases 下载最新的 Windows x64 插件 ZIP，解压到我选择的长期保留目录，按 README 运行安装脚本。保留已有 Codex 设置，检查并带我信任回复结束后自动运行的 Stop 脚本。安装完成后核对插件登记、打开入口和自动解释；需要我操作的步骤请具体说明。不要修改桌面端源码。
@@ -123,7 +125,25 @@ Codex 可以检查环境、定位程序、执行安装和排查问题。安装�
 
 ## 更新与卸载
 
-关闭解释小窗，解压新版本并重新执行 `install.ps1`，保持相同的 `-DataDirectory` 以保留窗口位置。新版可以解压到新的文件夹，脚本会更新已有的本地安装来源。检查新 hook 定义，再重新打开桌面端。项目没有后台下载更新的功能。
+### 更新已有安装
+
+**已安装本项目公开测试版的用户可以直接安装最新版，无需先卸载。** 已验证从 beta.1 更新到 beta.2，包括解压到不同文件夹的情况。项目需要手动更新，不会在后台下载新版本。
+
+可以把项目链接和下面这段话发给自己的 Codex：
+
+> 请帮我将已安装的 Codex Reply Explainer 更新到最新测试版。先阅读新版 README 和 install.ps1，从旧解压目录的 .local/installation.json 确认原来的 Codex 存储目录和解释数据目录。关闭解释小窗，将最新版 Windows x64 插件 ZIP 解压到长期保留的新目录，用原来的 CodexHome 和 DataDirectory 运行新版安装脚本，并确认当前 codex.exe 的位置。保留原来的窗口大小和位置。检查 Stop 脚本是否需要重新信任，指导我重启 Codex，确认插件版本、打开小窗以及新回复后的自动解释正常。不要修改桌面端源码。
+
+自己更新时：
+
+1. 关闭解释小窗，下载并解压最新版 Windows x64 插件 ZIP。
+2. 查看旧解压目录的 `.local/installation.json`，其中 `codexHome` 和 `dataDirectory` 是原来使用的目录。
+3. 在新版文件夹运行 `install.ps1`，用 `-CodexHome` 和 `-DataDirectory` 指定上一步的原目录；若找不到 Codex，补上当前的 `-CodexPath`。脚本会更新此插件的登记和运行副本。
+4. 在相同 Codex 存储目录的 CLI 中检查 `/hooks`；如果 Stop 脚本定义变了，重新检查并信任。重启 Codex 桌面端，然后打开解释小窗。
+5. 确认窗口大小和位置恢复，并在所选聊天下一次回复结束后确认解释自动更新。
+
+**换到新文件夹时，必须显式指定原来的 `-DataDirectory` 才能沿用窗口设置。** 不指定时会使用新文件夹下的 `.local/data`。如果原数据就在旧解压目录内，更新后仍需保留该目录。
+
+### 卸载
 
 卸载：
 
