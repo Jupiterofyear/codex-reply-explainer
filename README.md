@@ -4,7 +4,7 @@
 
 在独立小窗中，用容易理解的话解释 Codex 刚才的回复。**通过 Codex 官方临时分支（fork）机制继承对话上下文，尽量复用输入缓存，解释不写回主聊天。**
 
-测试版 **0.5.0-beta.2**，支持 Windows x64 上的本地 Codex / 本地 ChatGPT Work 聊天。普通 Chat、Work Cloud 和远程主机聊天暂不支持。此项目由社区开发，与 OpenAI 无隶属关系。
+测试版 **0.5.0-beta.3**，支持 Windows x64 上的本地 Codex / 本地 ChatGPT Work 聊天。普通 Chat、Work Cloud 和远程主机聊天暂不支持。此项目由社区开发，与 OpenAI 无隶属关系。
 
 ## 界面预览
 
@@ -67,49 +67,44 @@ token 是模型计算文本用量的单位。命中率按服务器返回的**本
 1. Windows 10/11 x64，已安装 Codex 桌面端并登录。
 2. Node.js **22.13 或更新版本**，`node.exe` 能从终端找到。
 3. Codex 的 `codex.exe` 能从终端找到；找不到时用安装参数指定其完整路径。使用支持 `plugin marketplace`、`thread/fork` 和 Stop hooks 的版本。
-4. 已有微软 WebView2 Runtime。安装包包含 WebView2 SDK 所需组件，不包含浏览器运行环境。
+4. Git 已加入 PATH，且能连接 GitHub。
+5. 已有微软 WebView2 Runtime。安装包包含 WebView2 SDK 所需组件，不包含浏览器运行环境。
 
 ## 安装：交给你自己的 Codex
 
-**首次安装可以直接使用最新版，无需先安装旧版。** 前往 [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases)，下载最新测试版的 Windows x64 插件 ZIP；安装请选文件名以 `-plugin-windows-x64.zip` 结尾的包。已有用户请按下方“更新已有安装”操作。
+**首次安装直接使用最新版。beta.1 / beta.2 用户运行一次新版安装脚本后，即可启用自动更新，无需先卸载。** 在 [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases) 下载文件名以 `-plugin-windows-x64.zip` 结尾的插件包。
 
-在能访问本机文件的本地 Codex 聊天中，发送本项目页面链接，并附上这段话：
+把项目链接和下面这段话发给自己的 Codex：
 
-> 请帮我安装这个项目的 Codex Reply Explainer（Codex 回复解释）插件。先阅读 README、PRIVACY.md 和 install.ps1，检查 Windows、Node.js、Codex 和 WebView2 是否满足要求。从 Releases 下载最新的 Windows x64 插件 ZIP，解压到我选择的长期保留目录，按 README 运行安装脚本。保留已有 Codex 设置，检查并带我信任回复结束后自动运行的 Stop 脚本。安装完成后核对插件登记、打开入口和自动解释；需要我操作的步骤请具体说明。不要修改桌面端源码。
+> 请帮我安装或更新 Codex Reply Explainer（Codex 回复解释），并启用自动更新。先阅读 README、PRIVACY.md 和 install.ps1，检查 Windows、Node.js、Git、Codex 和 WebView2 是否满足要求。下载最新版 Windows x64 插件 ZIP，解压到我选择的长期保留目录，运行安装脚本。已有安装时沿用原来的 Codex 存储目录和解释数据目录，保留窗口大小与位置。检查并指导我信任 Stop 脚本，然后重启 Codex，核对插件版本、打开入口和新回复后的自动解释。不要修改桌面端源码。
 
-Codex 可以检查环境、定位程序、执行安装和排查问题。安装会登记一个本地插件，并在 Codex 存储目录保存运行副本；解压文件和解释数据的保存位置由你选择。自动运行脚本需要先检查并信任，桌面端重新打开后加载插件。
+安装脚本将本项目 GitHub 主分支登记为插件来源。Codex 负责下载和更新运行文件，安装时会获取该分支当前发布的版本。个人安装设置单独保存，窗口位置留在原解释数据目录中。
 
 ### 自己执行安装
 
-也可以按下面的步骤操作：
+1. 关闭解释小窗，将最新版 Windows x64 插件 ZIP 解压到长期保留的文件夹。
+2. 在该文件夹打开 PowerShell：
 
-1. 将 `codex-reply-explainer-0.5.0-beta.2-plugin-windows-x64.zip` 解压到你准备长期保留的文件夹。路径可以包含空格。
-2. 在该文件夹打开 PowerShell，执行：
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-   ```
+   首次安装时，可以指定解释数据保存位置：
 
-   指定解释数据目录，例如：
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DataDirectory "D:\ReplyExplainerData"`
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DataDirectory "D:\ReplyExplainerData"
-   ```
+   已安装公开版时，省略 `-DataDirectory` 会沿用原数据目录。`-CodexHome` 可指定原安装使用的 Codex 存储目录；若 Codex 不在 PATH，用 `-CodexPath` 指定其 exe 完整路径。Node.js 和 Git 必须在 PATH 中。
+3. 在使用相同 Codex 存储目录的 CLI 中输入 `/hooks`，检查并信任本插件的 **Stop** 脚本，然后重新打开 Codex 桌面端。
+4. 打开解释小窗，确认窗口设置和新回复后的自动解释正常。
 
-   若 Codex 不在 PATH，用 `-CodexPath` 指定其 exe 完整路径。Node.js 必须已加入 PATH，以便回复结束后的通知脚本启动。`-CodexHome` 可指定独立的 Codex 存储目录；它必须与要解释的本地聊天属于同一个存储目录。
-
-3. 脚本通过 Codex 官方 `plugin marketplace add` / `plugin add` 安装到 `reply-explainer-preview` 来源，不修改桌面端源码。它不会自动信任运行脚本。
-4. 在使用相同 Codex 存储目录的 CLI 中输入 `/hooks`，检查并信任此插件的 **Stop** 通知脚本。每次脚本定义改变后需要重新检查。随后在方便时重新打开 Codex 桌面端。
-
-默认会写入的地方：
+安装会写入：
 
 | 位置 | 用途 |
 |---|---|
-| 当前解压文件夹的 `.local/install-source` | 当前电脑专用的安装来源，包含解析后的程序路径 |
-| 当前解压文件夹的 `.local/data` | 默认解释数据和窗口位置；可用参数更改 |
-| Codex 存储目录的配置和插件缓存 | 官方登记信息、启用状态、插件安装副本；默认位于用户的 `.codex` |
+| Codex 存储目录中的配置、插件来源和缓存 | 官方插件登记、自动更新下载及运行副本 |
+| Codex 存储目录的 `plugins/reply-explainer-settings.json` | 本机的解释数据目录和 Codex 程序位置；更新插件时保留 |
+| 所选解释数据目录 | 解释临时数据、诊断日志和窗口位置 |
+| 解压文件夹的 `.local` | 快捷启动信息、安装回执和安装临时文件 |
 
-安装脚本只更改所选的 Codex 存储目录。安装期间不会启动或关闭正在运行的桌面端。
+首次安装默认使用解压文件夹的 `.local/data` 保存解释数据。已有安装会沿用原目录；如果它位于旧解压文件夹内，请保留该目录。安装脚本不修改桌面端源码，也不会自行信任 Stop 脚本。
 
 ## 打开和使用
 
@@ -119,40 +114,31 @@ Codex 可以检查环境、定位程序、执行安装和排查问题。安装�
 4. **切换聊天后，在小窗顶部点一次“解释当前聊天”**，选中你当前正在看的本地聊天，无需重新打开菜单。这个按钮临时使用“复制应用内链接”快捷键，然后恢复剪贴板。使用按钮时只保留一个 Codex 主窗口。
 5. 可以拖动窗口、调整宽高。**关闭时保存大小和屏幕位置，下次打开自动恢复**；关闭小窗同时停止解释后台。后台意外退出时会保留已生成文字并显示错误；点击“解释当前聊天”可重新启动后台并生成解释。
 
-另一个打开方式：安装完成后，双击解压目录的 `open.cmd`，再点小窗顶部的“解释当前聊天”。它会使用安装时选择的数据目录、Codex 存储目录和程序路径。
+另一个打开方式：安装完成后，双击解压目录的 `open.cmd`，再点小窗顶部的“解释当前聊天”。它会定位已安装的当前版本，并使用原来的数据目录。
 
-如果没有自动更新，先检查 Stop 脚本是否已信任、小窗是否打开、绑定的是否为同一聊天。普通 Chat 不提供此版本需要的本地记录；它不会被转换成新的主聊天。
+如果解释没有随新回复更新，先检查 Stop 脚本是否已信任、小窗是否打开、绑定的是否为同一聊天。普通 Chat 不提供此版本需要的本地记录；它不会被转换成新的主聊天。
 
-## 更新与卸载
+## 自动更新与卸载
 
-### 更新已有安装
+从 **0.5.0-beta.3** 开始，安装脚本默认启用官方 Git 插件来源更新。
 
-**已安装本项目公开测试版的用户可以直接安装最新版，无需先卸载。** 已验证从 beta.1 更新到 beta.2，包括解压到不同文件夹的情况。项目需要手动更新，不会在后台下载新版本。
+- **新用户**：安装一次即可。
+- **beta.1 / beta.2 用户**：关闭小窗，运行一次新版安装脚本，重启 Codex。脚本会沿用已有解释数据目录和窗口设置。
+- **之后**：Codex 后台启动时检查 GitHub 主分支，发现已更新的插件文件后下载并刷新安装副本。可以通过重新打开 Codex 触发检查；需要能连接 GitHub。已打开的小窗关闭后重新打开，以加载新版。
+- Stop 脚本定义不变时，原有信任设置继续生效；定义变化时需要在 `/hooks` 中重新检查并信任。
 
-可以把项目链接和下面这段话发给自己的 Codex：
+自动更新跟随的是主分支中的 `.agents/plugins/marketplace.json` 和 `plugin/`。**只上传 Release 附件不会触发自动更新。** 发布者必须把经过构建、测试的安装文件一起提交到主分支。发布步骤见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-> 请帮我将已安装的 Codex Reply Explainer 更新到最新测试版。先阅读新版 README 和 install.ps1，从旧解压目录的 .local/installation.json 确认原来的 Codex 存储目录和解释数据目录。关闭解释小窗，将最新版 Windows x64 插件 ZIP 解压到长期保留的新目录，用原来的 CodexHome 和 DataDirectory 运行新版安装脚本，并确认当前 codex.exe 的位置。保留原来的窗口大小和位置。检查 Stop 脚本是否需要重新信任，指导我重启 Codex，确认插件版本、打开小窗以及新回复后的自动解释正常。不要修改桌面端源码。
-
-自己更新时：
-
-1. 关闭解释小窗，下载并解压最新版 Windows x64 插件 ZIP。
-2. 查看旧解压目录的 `.local/installation.json`，其中 `codexHome` 和 `dataDirectory` 是原来使用的目录。
-3. 在新版文件夹运行 `install.ps1`，用 `-CodexHome` 和 `-DataDirectory` 指定上一步的原目录；若找不到 Codex，补上当前的 `-CodexPath`。脚本会更新此插件的登记和运行副本。
-4. 在相同 Codex 存储目录的 CLI 中检查 `/hooks`；如果 Stop 脚本定义变了，重新检查并信任。重启 Codex 桌面端，然后打开解释小窗。
-5. 确认窗口大小和位置恢复，并在所选聊天下一次回复结束后确认解释自动更新。
-
-**换到新文件夹时，必须显式指定原来的 `-DataDirectory` 才能沿用窗口设置。** 不指定时会使用新文件夹下的 `.local/data`。如果原数据就在旧解压目录内，更新后仍需保留该目录。
+更新保留原数据目录、窗口大小和位置。插件不安装额外的常驻更新程序。Codex 自身负责检查和下载；这不保证发布后立即到达每个用户，也不强制关闭正在使用的窗口。
 
 ### 卸载
-
-卸载：
 
 ```powershell
 codex plugin remove reply-explainer@reply-explainer-preview
 codex plugin marketplace remove reply-explainer-preview
 ```
 
-随后可删除解压目录和自己指定的解释数据目录；保留它们不影响卸载。自定义 `CODEX_HOME` 的安装应在相同环境中卸载。
+随后可删除解压目录、自己指定的解释数据目录，以及 Codex 存储目录中的 `plugins/reply-explainer-settings.json`。自定义 `CODEX_HOME` 的安装应在相同环境中卸载。
 
 ## 从源码构建
 
@@ -165,7 +151,7 @@ npm test
 npm run package
 ```
 
-构建需要 Windows x64 的 .NET Framework C# 编译器。WebView2 SDK 的必要文件和许可证位于 `vendor/webview2`。构建只写入项目内的 `dist`、`.local`，安装包输出到 `.local/releases`。
+构建需要 Windows x64 的 .NET Framework C# 编译器。WebView2 SDK 的必要文件和许可证位于 `vendor/webview2`。构建还会生成供自动更新使用的 plugin 目录和 .agents/plugins/marketplace.json；其余输出位于项目内的 `dist`、`.local`，安装包输出到 `.local/releases`。
 
 ## 当前限制
 

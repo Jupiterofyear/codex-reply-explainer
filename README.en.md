@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 Explain Codex's latest reply in plain language in a separate floating window. **Uses Codex's official temporary fork mechanism to inherit conversation context and reuse cached input where possible. Explanations are kept out of the main chat.**
 
-Beta **0.5.0-beta.2** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
+Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
 ## Interface preview
 
@@ -67,49 +67,44 @@ On October 22, 2026, the version containing these fixes automatically started an
 1. Windows 10/11 x64, with the Codex desktop app installed and signed in.
 2. Node.js **22.13 or later**, with `node.exe` available on `PATH`.
 3. Codex's `codex.exe` available on `PATH`, or its full path supplied to the installer. Use a version supporting `plugin marketplace`, `thread/fork`, and Stop hooks.
-4. Microsoft WebView2 Runtime already installed. The package includes the required WebView2 SDK components, but not the browser runtime.
+4. Git is on PATH and GitHub is reachable.
+5. Microsoft WebView2 Runtime already installed. The package includes the required WebView2 SDK components, but not the browser runtime.
 
 ## Install with help from your own Codex
 
-**New users can install the latest release directly; no older version is required.** Open [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases) and download the latest beta asset ending in `-plugin-windows-x64.zip`. Existing users should follow “Update an existing installation” below.
+**New users can install the latest version directly. Users of beta.1 / beta.2 can run the new installer once to enable automatic updates, without uninstalling first.** Download the asset ending in `-plugin-windows-x64.zip` from [Releases](https://github.com/Jupiterofyear/codex-reply-explainer/releases).
 
-Open a local Codex chat that can access files on your computer. Send it this project's page URL together with the following request:
+Send the project URL and this request to your own Codex:
 
-> Please install this project's Codex Reply Explainer (Codex 回复解释) plugin for me. First read the README, PRIVACY.md, and install.ps1, and check the Windows, Node.js, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP from Releases, extract it to a permanent folder I choose, and run the installer as described in the README. Preserve my existing Codex settings. Inspect the Stop script that runs after replies and guide me through trusting it. After installation, verify plugin registration, the opening menu, and automatic explanations. Give me specific instructions for any steps I need to perform. Do not modify the desktop app's source code.
+> Please install or update Codex Reply Explainer and enable automatic updates. Read README, PRIVACY.md, and install.ps1 first. Check the Windows, Node.js, Git, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP, extract it to a permanent folder I choose, and run the installer. For an existing installation, retain its Codex storage directory, explanation data directory, and window size and position. Inspect the Stop script and guide me through trusting it. Restart Codex, then verify the installed version, opening menu, and automatic explanations after new replies. Do not modify the desktop app's source code.
 
-Codex can check the environment, locate programs, run the installer, and troubleshoot problems. Installation registers a local plugin and saves a runtime copy in your Codex storage directory. You choose where to keep the extracted files and explanation data. Review and trust the automatic script, then reopen the desktop app to load the plugin.
+The installer registers this project's GitHub main branch as the plugin source. Codex downloads and updates the runtime files. Installation gets the version currently published on that branch. Machine-specific settings are stored separately, and window geometry stays in the existing explanation data directory.
 
 ### Install it yourself
 
-You can also follow these steps:
+1. Close the floating window and extract the latest Windows x64 plugin ZIP to a permanent folder.
+2. Open PowerShell in that folder:
 
-1. Extract `codex-reply-explainer-0.5.0-beta.2-plugin-windows-x64.zip` to a folder you intend to keep. Paths containing spaces are supported.
-2. Open PowerShell in that folder and run:
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-   ```
+   For a first installation, optionally choose the explanation data directory:
 
-   To choose an explanation data directory, for example:
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DataDirectory "D:\ReplyExplainerData"`
 
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DataDirectory "D:\ReplyExplainerData"
-   ```
+   For an existing public release, omitting `-DataDirectory` preserves the original data directory. Use `-CodexHome` for the Codex storage directory of the previous installation, and `-CodexPath` if Codex is not on PATH. Node.js and Git must be on PATH.
+3. In the CLI using the same Codex storage directory, enter `/hooks`, inspect and trust this plugin's **Stop** script, then restart the Codex desktop app.
+4. Open the floating window and check window geometry and automatic explanations after new replies.
 
-   If Codex is not on `PATH`, supply the full executable path with `-CodexPath`. Node.js must be on `PATH` so the script triggered after replies can start. `-CodexHome` selects a separate Codex storage directory; it must be the directory containing the local chats you want to explain.
-
-3. The script installs through Codex's official `plugin marketplace add` / `plugin add` commands, using the `reply-explainer-preview` source. It does not modify the desktop app's source or automatically trust scripts.
-4. In the Codex CLI using the same storage directory, enter `/hooks`, inspect this plugin's **Stop** script, and trust it. Review it again whenever its definition changes. Then reopen the Codex desktop app when convenient.
-
-Default write locations:
+Installation writes to:
 
 | Location | Purpose |
 |---|---|
-| `.local/install-source` inside the extracted folder | Installation source for this computer, including resolved program paths |
-| `.local/data` inside the extracted folder | Default explanation data and window geometry; can be changed with an installer option |
-| Configuration and plugin cache in the Codex storage directory | Official registration, enabled state, and installed plugin copy; defaults to the user's `.codex` directory |
+| Configuration, plugin sources, and cache in the Codex storage directory | Official registration, automatic-update downloads, and runtime copies |
+| `plugins/reply-explainer-settings.json` in the Codex storage directory | Machine-specific data directory and Codex executable location; retained across plugin updates |
+| Selected explanation data directory | Temporary explanations, diagnostic logs, and window geometry |
+| `.local` inside the extracted folder | Launcher information, installation receipt, and temporary installation files |
 
-The installer changes only the selected Codex storage directory. It does not start or close the running desktop app during installation.
+A first installation defaults to `.local/data` inside the extracted folder. Existing installations retain their data directory. If it lives inside an older extracted folder, keep that directory. The installer does not modify desktop source code or automatically trust the Stop script.
 
 ## Open and use
 
@@ -121,40 +116,31 @@ The plugin's interface currently uses Chinese labels. Their English meanings are
 4. **After switching chats, click “解释当前聊天” (Explain current chat) once at the top of the floating window.** This selects the chat you are currently viewing without reopening the menu. The button temporarily uses the “copy in-app link” shortcut and then restores the clipboard. Keep only one Codex main window open when using this button.
 5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前聊天” (Explain current chat) to restart the backend and generate the explanation again.
 
-Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前聊天” (Explain current chat). The launcher uses the data directory, Codex storage directory, and program paths selected during installation.
+Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前聊天” (Explain current chat). The launcher locates the currently installed version and uses the existing data directory.
 
-If automatic updates are missing, check that the Stop script is trusted, the window is open, and it is bound to the same chat. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
+If explanations do not update after replies, check that the Stop script is trusted, the window is open, and it is bound to the same chat. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
 
-## Update and uninstall
+## Automatic updates and uninstalling
 
-### Update an existing installation
+Starting with **0.5.0-beta.3**, the installer enables Codex's official Git marketplace updates by default.
 
-**Users of this project's public beta can install the latest version directly without uninstalling first.** Updating from beta.1 to beta.2 has been verified, including installation from a different folder. Updates are manual; the plugin does not download new versions in the background.
+- **New users:** install once.
+- **beta.1 / beta.2 users:** close the floating window, run the new installer once, and restart Codex. The installer preserves the existing explanation data directory and window geometry.
+- **After that:** when the Codex backend starts, it checks the GitHub main branch, downloads changed plugin files, and refreshes the installed copy. Reopening Codex triggers a check; GitHub must be reachable. Close and reopen an existing floating window to load the new version.
+- Existing Stop-script trust remains valid when its definition is unchanged. If the definition changes, inspect and trust it again in `/hooks`.
 
-Send the project URL and this request to your own Codex:
+Updates follow `.agents/plugins/marketplace.json` and `plugin/` on main. **Uploading Release assets alone does not trigger an automatic update.** Publishers must also commit the built, tested installation files to main. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release workflow.
 
-> Please update my installed Codex Reply Explainer to the latest beta. Read the new README and install.ps1 first. Read .local/installation.json in the previous extracted folder to identify my existing Codex storage and explanation data directories. Close the floating window, extract the latest Windows x64 plugin ZIP to a permanent new folder, and run its installer with the original CodexHome and DataDirectory. Locate the current codex.exe. Preserve my window size and position. Check whether the Stop script needs to be trusted again, guide me through restarting Codex, and verify the installed version, opening the window, and automatic explanations after new replies. Do not modify the desktop app's source code.
-
-To update manually:
-
-1. Close the floating window. Download and extract the latest Windows x64 plugin ZIP.
-2. Read `.local/installation.json` in the previous extracted folder. Its `codexHome` and `dataDirectory` fields identify your existing directories.
-3. Run `install.ps1` from the new folder with `-CodexHome` and `-DataDirectory` set to those original directories. Supply the current `-CodexPath` if Codex cannot be found. The installer updates this plugin's registration and runtime copy.
-4. Check `/hooks` in the CLI using the same Codex storage directory. If the Stop script definition changed, inspect and trust it again. Restart the Codex desktop app and open the explanation window.
-5. Confirm that the window size and position are restored and that the next completed reply in the selected chat updates the explanation automatically.
-
-**When installing from a new folder, explicitly pass the original `-DataDirectory` to keep your window settings.** Otherwise, the installer uses `.local/data` inside the new folder. If your original data directory is inside the old extracted folder, keep that directory after updating.
+Updates retain the data directory and window size and position. The plugin installs no additional persistent updater. Codex handles checking and downloading; delivery is not immediate for every user, and open windows are not forcibly closed.
 
 ### Uninstall
-
-To uninstall:
 
 ```powershell
 codex plugin remove reply-explainer@reply-explainer-preview
 codex plugin marketplace remove reply-explainer-preview
 ```
 
-You can then delete the extracted folder and your chosen explanation data directory. Keeping those files does not prevent uninstallation. If you installed with a custom `CODEX_HOME`, uninstall using the same environment.
+You can then delete the extracted folder, your selected explanation data directory, and `plugins/reply-explainer-settings.json` in the Codex storage directory. If installed with a custom `CODEX_HOME`, uninstall using the same environment.
 
 ## Build from source
 
@@ -167,7 +153,7 @@ npm test
 npm run package
 ```
 
-Building requires the Windows x64 .NET Framework C# compiler. Required WebView2 SDK files and licenses are in `vendor/webview2`. Build output stays inside the project's `dist` and `.local` directories; packages are written to `.local/releases`.
+Building requires the Windows x64 .NET Framework C# compiler. Required WebView2 SDK files and licenses are in `vendor/webview2`. Building also prepares plugin/ and .agents/plugins/marketplace.json for automatic updates. Other output stays inside the project's `dist` and `.local` directories; packages are written to `.local/releases`.
 
 ## Current limitations
 

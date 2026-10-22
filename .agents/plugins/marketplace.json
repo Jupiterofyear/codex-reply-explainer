@@ -1,0 +1,20 @@
+{
+  "name": "reply-explainer-preview",
+  "interface": {
+    "displayName": "Codex Reply Explainer"
+  },
+  "plugins": [
+    {
+      "name": "reply-explainer",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

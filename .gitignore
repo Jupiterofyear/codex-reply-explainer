@@ -4,3 +4,5 @@ dist/
 *.log
 *.tmp
 *.zip
+
+!plugin/dist/

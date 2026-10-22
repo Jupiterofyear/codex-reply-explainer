@@ -1,4 +1,5 @@
-import { readdir, readFile, mkdir, cp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, readFile, writeFile, mkdir, cp, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -7,7 +8,7 @@ const { version } = JSON.parse(await readFile("package.json", "utf8"));
 const releases = path.join(root, ".local/releases");
 await mkdir(releases, { recursive: true });
 const runtime = [".codex-plugin", ".mcp.json", "hooks", "settings.json", "dist", "assets", "install.ps1", "open.cmd", "README.md", "README.en.md", "LICENSE", "PRIVACY.md", "THIRD_PARTY_NOTICES.md", "VALIDATION.md"];
-const source = [".gitignore", ".codex-plugin", ".mcp.json", "hooks", "settings.json", "src", "test", "scripts", "vendor", "assets", "package.json", "package-lock.json", "install.ps1", "open.cmd", "README.md", "README.en.md", "LICENSE", "PRIVACY.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "CHANGELOG.md", "VALIDATION.md"];
+const source = [".agents", "plugin", ".gitignore", ".codex-plugin", ".mcp.json", "hooks", "settings.json", "src", "test", "scripts", "vendor", "assets", "package.json", "package-lock.json", "install.ps1", "open.cmd", "README.md", "README.en.md", "LICENSE", "PRIVACY.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "CHANGELOG.md", "VALIDATION.md"];
 for (const [kind, entries] of [["plugin-windows-x64", runtime], ["source", source]]) {
   const name = `codex-reply-explainer-${version}-${kind}`;
   const stage = path.join(releases, name);
@@ -26,3 +27,7 @@ for (const [kind, entries] of [["plugin-windows-x64", runtime], ["source", sourc
   execFileSync("tar.exe", ["-a", "-c", "-f", archive, "-C", stage, "."], { stdio: "inherit", windowsHide: true });
   console.log(archive);
 }
+
+const archives = ["plugin-windows-x64", "source"].map(kind => "codex-reply-explainer-" + version + "-" + kind + ".zip");
+const sums = await Promise.all(archives.map(async name => createHash("sha256").update(await readFile(path.join(releases, name))).digest("hex") + "  " + name));
+await writeFile(path.join(releases, "SHA256SUMS.txt"), sums.join("\n") + "\n");
