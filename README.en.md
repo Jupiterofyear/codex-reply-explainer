@@ -2,11 +2,13 @@
 
 English | [简体中文](README.md)
 
-Explain Codex's latest reply in plain language in a separate floating window. **Uses Codex's official temporary fork mechanism to inherit conversation context and reuse cached input where possible. Explanations are kept out of the main chat.**
+Explain Codex replies and ask follow-up questions in a separate floating window. **Uses Codex's official temporary fork mechanism to inherit context. Explanations and questions stay out of the main chat.**
 
 Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
-### Development branch: explanations and questions (unreleased)
+All current features are maintained on [`main`](https://github.com/Jupiterofyear/codex-reply-explainer/tree/main). Installation and automatic updates follow that branch; no separate question-feature branch is required.
+
+## Explanations and questions
 
 The floating window now has **解释 (Explain)** and **提问 (Ask)** tabs. The window reads the selected sidebar conversation through Windows accessibility about once per second, without requiring a main-chat message or generating content. Click the bottom **解释当前对话 (Explain current conversation)** button to generate an explanation. Changing chats in the main window selects the corresponding floating-window chat tab. Manually selecting an older tab keeps it visible until the next main-window chat change; explanations and questions target that selected tab. A horizontally scrollable row below Explain/Ask retains each chat’s content, draft and reading position. Ask sends with Enter; Shift+Enter inserts a new line. Switching tabs preserves the text, question draft, and scroll position.
 
@@ -15,6 +17,8 @@ The first question forks the selected chat's latest complete saved context using
 Explanations and questions have separate backends and ephemeral branches, so they can generate concurrently. During generation, Send becomes Stop; stopping preserves received text and allows follow-up. Thinking indicators follow backend events: before the first output and below a paragraph when reasoning resumes. Each active stage has a moving highlight and a live clock; completed stages keep their thinking duration, and completed or stopped answers retain total duration. Switching chats preserves the timer. Reduced-motion settings disable the highlight animation. Start over cancels only the active question. The composer and body follow Codex’s UI font size, and code follows its code font size; changes are picked up while the window is open. Question forks disable connector/MCP plugins, use a read-only sandbox, and reject interactive execution requests; the prompt asks the model to answer from existing context without tools. These tool settings can change the cached input prefix, so the historical explanation measurements below do not establish question performance. See [VALIDATION.md](VALIDATION.md) for local checks.
 
 ## Interface preview
+
+These screenshots show an earlier explanation page. The current version also includes Ask, chat tabs, thinking timers, and a Stop button.
 
 Edited from a real full-window screenshot, with chat names, project names, and avatar initials replaced. The text comes from an actual generation for a fictional scenario: a 708-character original reply and its 168-character explanation. The main chat shows the latter part of the long reply, while the floating window shows the complete explanation. Both appear near the top.
 
@@ -29,7 +33,7 @@ Click the image to view the full-size version, or read the [complete example rep
 - Select a chat. The plugin reads its locally saved history through the latest completed reply.
 - It creates a temporary fork from that history, keeping the original model and reasoning effort and reusing cached input where possible. If the conversation has been compacted, it inherits the context that remains after compaction.
 - The backend starts and is reused automatically. Explanations are generated only after clicking the bottom button.
-- Explanations appear only in the floating window. Switching chats or closing the window clears the previous explanation. Temporary copies of context and authentication data are removed after generation; closing the window removes the explanation backend's directory.
+- Explanations and questions appear only in the floating window. Chat tabs retain their contents when switching. Closing the window clears all temporary contents and backends while preserving window geometry. Temporary copies of context and authentication data are removed after generation.
 - Supports Markdown and common mathematical notation.
 - **Remembers the window size and screen position when closed, and restores them the next time it opens.**
 
@@ -86,7 +90,7 @@ Send the project URL and this request to your own Codex:
 
 > Please install or update Codex Reply Explainer and enable automatic updates. Read README, PRIVACY.md, and install.ps1 first. Check the Windows, Node.js, Git, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP, extract it to a permanent folder I choose, and run the installer. For an existing installation, retain its Codex storage directory, explanation data directory, and window size and position. This version requires no lifecycle hook approval. Restart Codex, then verify the installed version, opening menu, and automatic chat selection plus explanations after clicking the button. Do not modify the desktop app's source code.
 
-The installer registers this project's GitHub main branch as the plugin source. Codex downloads and updates the runtime files. Installation gets the version currently published on that branch. Machine-specific settings are stored separately, and window geometry stays in the existing explanation data directory.
+The installer registers this project's GitHub main branch as the plugin source. Codex downloads and updates the runtime files. Installation gets the current build on that branch, including the Explain and Ask features described here. Machine-specific settings are stored separately, and window geometry stays in the existing explanation data directory.
 
 ### Install it yourself
 
@@ -120,9 +124,10 @@ The plugin's interface currently uses Chinese labels. Their English meanings are
 
 1. Open the local chat you want to explain. In the **top-right corner of the chat area, select “+” → “更多工具” (More tools) → “Codex 回复解释” (Codex Reply Explainer)** to open the floating window.
 2. The window selects that chat and waits for the bottom explanation button to be clicked. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open. If you retain the panel, its “打开悬浮窗” (Open floating window) button reopens the window directly.
-3. Sending a main-chat message selects that chat without generating an explanation. Click the bottom button when you want to explain its latest completed reply.
-4. **Selecting another sidebar chat updates the floating window automatically.** Keep one main window open with its selected sidebar conversation visible. The name must uniquely match a local saved conversation; duplicate names produce an explicit error. The current selection is checked again before explaining or sending. Recognition uses no focus changes, keystrokes, or clipboard access. Draft text survives conversation switches.
-5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前对话” (Explain current conversation) to restart the backend and generate the explanation again.
+3. Select **提问 (Ask)** to ask questions using this chat’s context. Enter sends; Shift+Enter inserts a line break. During generation, the send arrow becomes a Stop square. Stopping keeps received text and permits follow-up. Thinking indicators appear before the corresponding output and update their elapsed time each second.
+4. **Changing the main-window chat selects its floating-window tab automatically.** Keep one main window open with its selected sidebar chat visible. Clicking an older tab lets you read its explanations and Q&A and continue working with that chat; automatic following resumes on the next main-window chat change. Recognition uses no focus changes, keystrokes, or clipboard access.
+5. Sending main-chat messages or changing chats does not generate explanations. Click the bottom explanation button when needed.
+6. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, stops both backends, and clears temporary contents from all chat tabs. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前对话” (Explain current conversation) to restart the backend and generate the explanation again.
 
 Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前对话” (Explain current conversation). The launcher locates the currently installed version and uses the existing data directory.
 
@@ -135,7 +140,7 @@ Starting with **0.5.0-beta.3**, the installer enables Codex's official Git marke
 - **New users:** install once.
 - **beta.1 / beta.2 users:** close the floating window, run the new installer once, and restart Codex. The installer preserves the existing explanation data directory and window geometry.
 - **After that:** when the Codex backend starts, it checks the GitHub main branch, downloads changed plugin files, and refreshes the installed copy. Reopening Codex triggers a check; GitHub must be reachable. Close and reopen an existing floating window to load the new version.
-- This development version reads the selected sidebar conversation and registers no lifecycle hooks.
+- This version reads the selected sidebar conversation and registers no lifecycle hooks.
 
 Updates follow `.agents/plugins/marketplace.json` and `plugin/` on main. **Uploading Release assets alone does not trigger an automatic update.** Publishers must also commit the built, tested installation files to main. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release workflow.
 
@@ -167,7 +172,7 @@ Building requires the Windows x64 .NET Framework C# compiler. Required WebView2 
 
 This version depends on local record formats, database structure, and Codex's fork interface. Desktop updates may require adjustments. It preserves effective conversation history, while its separate explanation backend does not reproduce every part of the desktop backend's running state. Cache hits are measured using the server's returned counts.
 
-This beta is distributed as source code and a manually installed package. The development version no longer includes lifecycle hooks. See the [official plugin documentation](https://developers.openai.com/plugins/build/plugins).
+This beta is distributed as source code and a manually installed package. This version registers no lifecycle hooks. See the [official plugin documentation](https://developers.openai.com/plugins/build/plugins).
 
 ## Privacy and licenses
 
