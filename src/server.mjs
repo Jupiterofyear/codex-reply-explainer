@@ -1,6 +1,6 @@
 import { loadSettings } from "./settings.mjs";
 import { openFloatingWindow, readThreadName } from "./floating.mjs";
-import { spawn } from "node:child_process";
+import { ensureWorker, enqueueStop } from "./worker-client.mjs";
 import os from "node:os";
 import { latestReplyEvent } from "./latest.mjs";
 import { readFile } from "node:fs/promises";
@@ -36,7 +36,7 @@ server.registerTool("reply_explainer.open", {
 });
 server.registerTool("reply_explainer.explain_latest", {
   title: "解释最后一条回复",
-  description: "打开面板时，为当前聊天最后一条已完成回复生成解释。",
+  description: "点击解释按钮时，为当前聊天最后一条已完成回复生成解释。",
   inputSchema: {},
   annotations: { readOnlyHint: true, openWorldHint: false },
   _meta: { ui: { visibility: ["app"] } }
@@ -54,12 +54,9 @@ async function ensureLatest(threadId) {
   const event = await latestReplyEvent(sourceHome, threadId);
   if (!event) return { threadId, status: "unavailable" };
   if (event.turn_id === state.turnId) return state;
-  const child = spawn(process.execPath, [path.join(root, "dist", "stop.mjs")], {
-    cwd: root, env: process.env, windowsHide: true, detached: true, stdio: ["pipe", "ignore", "ignore"]
-  });
-  child.stdin.end(JSON.stringify(event));
-  child.unref();
-  return { threadId, turnId: event.turn_id, status: "generating", startedAt: new Date().toISOString() };
+  await ensureWorker({ root, dataRoot, sourceHome });
+  await enqueueStop(event, { dataRoot });
+  return await readExplanation(dataRoot, threadId);
 }
 
 server.registerTool("reply_explainer.open_floating", {
@@ -72,9 +69,9 @@ server.registerTool("reply_explainer.open_floating", {
   const threadId = extra._meta?.threadId;
   if (typeof threadId !== "string") throw new Error("请从当前聊天打开 Codex 回复解释。");
   const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-  const title = readThreadName(sourceHome, threadId);
+  const title = await readThreadName(sourceHome, threadId);
   await openFloatingWindow({ root, dataRoot, sourceHome, threadId, title });
-  const state = await ensureLatest(threadId);
+  const state = await readExplanation(dataRoot, threadId);
   return { content: [], _meta: { replyExplainer: state, floatingWindow: { requested: true, title } } };
 });
 

@@ -7217,6 +7217,7 @@ async function loadSettings(root2) {
 // src/worker-client.mjs
 import { spawn } from "node:child_process";
 import { openSync, closeSync } from "node:fs";
+import { rm as rm2 } from "node:fs/promises";
 import { setTimeout as delay2 } from "node:timers/promises";
 import path3 from "node:path";
 
@@ -7295,33 +7296,31 @@ async function activeSelection(dataRoot2) {
   if (!await isWindowOpen(dataRoot2)) return null;
   return await readJson(path2.join(dataRoot2, "floating", "selection.json"));
 }
-async function discardSelection(dataRoot2, selection) {
-  if (!selection) return;
-  const { directory, latest } = explanationFiles(dataRoot2, selection);
-  const files = await readdir(directory);
-  for (const file of files) {
-    if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path2.join(directory, file), { force: true });
-  }
+async function retainedSelections(dataRoot2) {
+  return (await readJson(path2.join(dataRoot2, "floating", "chats.json")))?.selections || [];
 }
 async function selectChat(dataRoot2, threadId, title) {
   threadDirectory(dataRoot2, threadId);
-  const file = path2.join(dataRoot2, "floating", "selection.json");
-  const previous = await readJson(file);
-  if (previous?.threadId === threadId && await isWindowOpen(dataRoot2)) return previous;
-  const selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
-  await writeJson(file, selection);
-  await discardSelection(dataRoot2, previous);
+  const directory = path2.join(dataRoot2, "floating");
+  const selections = await isWindowOpen(dataRoot2) ? await retainedSelections(dataRoot2) : [];
+  let selection = selections.find((item) => item.threadId === threadId);
+  if (!selection) {
+    selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
+    selections.push(selection);
+  } else selection.title = title;
+  await writeJson(path2.join(directory, "chats.json"), { selections });
+  await writeJson(path2.join(directory, "selection.json"), selection);
   return selection;
 }
 async function readExplanation(dataRoot2, threadId) {
   threadDirectory(dataRoot2, threadId);
-  const selection = await readJson(path2.join(dataRoot2, "floating", "selection.json"));
-  if (selection?.threadId !== threadId) return { threadId, status: "idle" };
+  const selection = (await retainedSelections(dataRoot2)).find((item) => item.threadId === threadId);
+  if (!selection) return { threadId, status: "idle" };
   const latest = await readJson(explanationFiles(dataRoot2, selection).latest);
   if (!latest) return { threadId, status: selection.initialStatus || "idle" };
   const state = await readJson(explanationFiles(dataRoot2, selection, latest.turnId).result) || { threadId, status: "idle" };
   if (state.workerPid && ["queued", "generating"].includes(state.status) && !isProcessRunning(state.workerPid)) {
-    return { ...state, status: "error", error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u9000\u51FA\u3002\u70B9\u51FB\u201C\u89E3\u91CA\u5F53\u524D\u804A\u5929\u201D\u53EF\u91CD\u65B0\u751F\u6210\u3002" };
+    return { ...state, status: "error", error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u9000\u51FA\u3002\u70B9\u51FB\u201C\u89E3\u91CA\u5F53\u524D\u5BF9\u8BDD\u201D\u53EF\u91CD\u65B0\u751F\u6210\u3002" };
   }
   return state;
 }
@@ -7381,16 +7380,39 @@ async function ensureWorker({ root: root2, dataRoot: dataRoot2, sourceHome }) {
   }
   throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u8D85\u65F6\u3002");
 }
+async function enqueueStop(event, { dataRoot: dataRoot2 }) {
+  threadDirectory(dataRoot2, event.session_id);
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(event.turn_id)) throw new Error("\u56DE\u590D\u6807\u8BC6\u65E0\u6548\u3002");
+  if (!event.last_assistant_message?.trim() || !event.transcript_path) return;
+  const selection = await activeSelection(dataRoot2);
+  if (selection?.threadId !== event.session_id) return;
+  const previous = await readExplanation(dataRoot2, event.session_id);
+  if (previous.turnId === event.turn_id && previous.status !== "error") return;
+  const files = explanationFiles(dataRoot2, selection, event.turn_id);
+  const worker = await liveWorker(dataRoot2);
+  await writeJson(files.result, {
+    threadId: event.session_id,
+    turnId: event.turn_id,
+    status: worker ? "queued" : "error",
+    workerPid: worker?.pid,
+    ...worker ? {} : { error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u7ED3\u675F\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u5C0F\u7A97\u3002" },
+    startedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  await writeJson(files.latest, { turnId: event.turn_id });
+  if (previous.turnId && previous.turnId !== event.turn_id) await rm2(explanationFiles(dataRoot2, selection, previous.turnId).result, { force: true });
+  if (!worker) return;
+  await writeJson(workerFiles(dataRoot2).pending, { openId: selection.openId, event });
+}
 
 // src/floating.mjs
-import { DatabaseSync } from "node:sqlite";
 import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir2 } from "node:fs/promises";
 import path4 from "node:path";
 import { setTimeout as delay3 } from "node:timers/promises";
-function readThreadName(sourceHome, threadId) {
+async function readThreadName(sourceHome, threadId) {
+  const { DatabaseSync: DatabaseSync2 } = await import("node:sqlite");
   threadDirectory(sourceHome, threadId);
-  const database = new DatabaseSync(path4.join(sourceHome, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync2(path4.join(sourceHome, "state_5.sqlite"), { readOnly: true });
   try {
     const thread = database.prepare("SELECT name, title FROM threads WHERE id = ?").get(threadId);
     if (!thread) throw new Error("\u6CA1\u6709\u627E\u5230\u8FD9\u6BB5\u804A\u5929\u7684\u540D\u79F0\u3002");
@@ -7430,11 +7452,10 @@ async function openFloatingWindow({ root: root2, dataRoot: dataRoot2, sourceHome
 }
 
 // src/server.mjs
-import { spawn as spawn3 } from "node:child_process";
 import os2 from "node:os";
 
 // src/latest.mjs
-import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import path7 from "node:path";
 
 // src/history.mjs
@@ -7504,7 +7525,7 @@ async function readRolloutHistory(sourceHome, source) {
 // src/latest.mjs
 async function latestReplyEvent(sourceHome, threadId) {
   threadDirectory(sourceHome, threadId);
-  const database = new DatabaseSync2(path7.join(sourceHome, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync(path7.join(sourceHome, "state_5.sqlite"), { readOnly: true });
   let transcript;
   try {
     const thread = database.prepare("SELECT rollout_path FROM threads WHERE id = ?").get(threadId);
@@ -23856,7 +23877,7 @@ server.registerTool("reply_explainer.open", {
 });
 server.registerTool("reply_explainer.explain_latest", {
   title: "\u89E3\u91CA\u6700\u540E\u4E00\u6761\u56DE\u590D",
-  description: "\u6253\u5F00\u9762\u677F\u65F6\uFF0C\u4E3A\u5F53\u524D\u804A\u5929\u6700\u540E\u4E00\u6761\u5DF2\u5B8C\u6210\u56DE\u590D\u751F\u6210\u89E3\u91CA\u3002",
+  description: "\u70B9\u51FB\u89E3\u91CA\u6309\u94AE\u65F6\uFF0C\u4E3A\u5F53\u524D\u804A\u5929\u6700\u540E\u4E00\u6761\u5DF2\u5B8C\u6210\u56DE\u590D\u751F\u6210\u89E3\u91CA\u3002",
   inputSchema: {},
   annotations: { readOnlyHint: true, openWorldHint: false },
   _meta: { ui: { visibility: ["app"] } }
@@ -23873,16 +23894,9 @@ async function ensureLatest(threadId) {
   const event = await latestReplyEvent(sourceHome, threadId);
   if (!event) return { threadId, status: "unavailable" };
   if (event.turn_id === state.turnId) return state;
-  const child = spawn3(process.execPath, [path8.join(root, "dist", "stop.mjs")], {
-    cwd: root,
-    env: process.env,
-    windowsHide: true,
-    detached: true,
-    stdio: ["pipe", "ignore", "ignore"]
-  });
-  child.stdin.end(JSON.stringify(event));
-  child.unref();
-  return { threadId, turnId: event.turn_id, status: "generating", startedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  await ensureWorker({ root, dataRoot, sourceHome });
+  await enqueueStop(event, { dataRoot });
+  return await readExplanation(dataRoot, threadId);
 }
 server.registerTool("reply_explainer.open_floating", {
   title: "Codex \u56DE\u590D\u89E3\u91CA\uFF08\u60AC\u6D6E\u7A97\uFF09",
@@ -23894,9 +23908,9 @@ server.registerTool("reply_explainer.open_floating", {
   const threadId = extra._meta?.threadId;
   if (typeof threadId !== "string") throw new Error("\u8BF7\u4ECE\u5F53\u524D\u804A\u5929\u6253\u5F00 Codex \u56DE\u590D\u89E3\u91CA\u3002");
   const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path8.join(os2.homedir(), ".codex");
-  const title = readThreadName(sourceHome, threadId);
+  const title = await readThreadName(sourceHome, threadId);
   await openFloatingWindow({ root, dataRoot, sourceHome, threadId, title });
-  const state = await ensureLatest(threadId);
+  const state = await readExplanation(dataRoot, threadId);
   return { content: [], _meta: { replyExplainer: state, floatingWindow: { requested: true, title } } };
 });
 await server.connect(new StdioServerTransport());

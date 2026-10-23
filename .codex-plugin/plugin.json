@@ -3,7 +3,6 @@
   "version": "0.5.0-beta.3",
   "description": "Explain the latest local Codex reply in a separate Windows window.",
   "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex 回复解释",
     "shortDescription": "结合对话，用清楚、简短的话解释刚才的回复",

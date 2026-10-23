@@ -61,16 +61,6 @@ async function writeJson(file, value) {
     await rm(temporary, { force: true });
   }
 }
-function explanationFiles(dataRoot, selection, turnId) {
-  threadDirectory(dataRoot, selection.openId);
-  if (turnId !== void 0 && !/^[a-zA-Z0-9_-]{1,100}$/.test(turnId)) throw new Error("\u56DE\u590D\u6807\u8BC6\u65E0\u6548\u3002");
-  const directory = path2.join(path2.resolve(dataRoot), "floating");
-  return {
-    directory,
-    latest: path2.join(directory, "latest-" + selection.openId + ".json"),
-    result: turnId === void 0 ? null : path2.join(directory, "result-" + selection.openId + "-" + turnId + ".json")
-  };
-}
 async function isWindowOpen(dataRoot) {
   const directory = path2.join(dataRoot, "floating");
   const file = path2.join(directory, "window.json");
@@ -96,22 +86,20 @@ async function isWindowOpen(dataRoot) {
   }
   return true;
 }
-async function discardSelection(dataRoot, selection) {
-  if (!selection) return;
-  const { directory, latest } = explanationFiles(dataRoot, selection);
-  const files = await readdir(directory);
-  for (const file of files) {
-    if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path2.join(directory, file), { force: true });
-  }
+async function retainedSelections(dataRoot) {
+  return (await readJson(path2.join(dataRoot, "floating", "chats.json")))?.selections || [];
 }
 async function selectChat(dataRoot, threadId, title) {
   threadDirectory(dataRoot, threadId);
-  const file = path2.join(dataRoot, "floating", "selection.json");
-  const previous = await readJson(file);
-  if (previous?.threadId === threadId && await isWindowOpen(dataRoot)) return previous;
-  const selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
-  await writeJson(file, selection);
-  await discardSelection(dataRoot, previous);
+  const directory = path2.join(dataRoot, "floating");
+  const selections = await isWindowOpen(dataRoot) ? await retainedSelections(dataRoot) : [];
+  let selection = selections.find((item) => item.threadId === threadId);
+  if (!selection) {
+    selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
+    selections.push(selection);
+  } else selection.title = title;
+  await writeJson(path2.join(directory, "chats.json"), { selections });
+  await writeJson(path2.join(directory, "selection.json"), selection);
   return selection;
 }
 
@@ -163,7 +151,6 @@ async function ensureWorker({ root: root2, dataRoot, sourceHome }) {
 }
 
 // src/floating.mjs
-import { DatabaseSync } from "node:sqlite";
 import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir2 } from "node:fs/promises";
 import path4 from "node:path";

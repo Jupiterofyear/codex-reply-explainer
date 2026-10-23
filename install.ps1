@@ -91,5 +91,5 @@ $launcher = @(
 [IO.File]::WriteAllText((Join-Path $root '.local/open.cmd'), $launcher + [Environment]::NewLine, $utf8)
 Write-JsonFile (Join-Path $root '.local/installation.json') @{ codexHome = $CodexHome; dataDirectory = $DataDirectory; codexPath = $CodexPath; nodePath = $NodePath; marketplace = 'reply-explainer-preview'; automaticUpdates = $true }
 Write-Host 'Installed with automatic updates from the GitHub main branch.'
-Write-Host 'Review and trust the Stop hook in /hooks, then restart Codex.'
+Write-Host 'Reopen Codex, then open the floating window. No lifecycle hook approval is required.'
 Write-Host 'Open Codex Reply Explainer from + > More tools, or use open.cmd.'

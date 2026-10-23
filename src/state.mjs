@@ -68,25 +68,35 @@ export async function discardSelection(dataRoot, selection) {
     if (file === path.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path.join(directory, file), { force: true });
   }
 }
+export async function retainedSelections(dataRoot) {
+  return (await readJson(path.join(dataRoot, "floating", "chats.json")))?.selections || [];
+}
+export async function isRetainedSelection(dataRoot, selection) {
+  return await isWindowOpen(dataRoot) && (await retainedSelections(dataRoot)).some(item => item.openId === selection.openId);
+}
 export async function selectChat(dataRoot, threadId, title) {
   threadDirectory(dataRoot, threadId);
-  const file = path.join(dataRoot, "floating", "selection.json");
-  const previous = await readJson(file);
-  if (previous?.threadId === threadId && await isWindowOpen(dataRoot)) return previous;
-  const selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
-  await writeJson(file, selection);
-  await discardSelection(dataRoot, previous);
+  const directory = path.join(dataRoot, "floating");
+  const selections = await isWindowOpen(dataRoot) ? await retainedSelections(dataRoot) : [];
+  let selection = selections.find(item => item.threadId === threadId);
+  if (!selection) {
+    selection = { threadId, title, openId: randomUUID(), initialStatus: "idle" };
+    selections.push(selection);
+  } else selection.title = title;
+  await writeJson(path.join(directory, "chats.json"), { selections });
+  await writeJson(path.join(directory, "selection.json"), selection);
   return selection;
 }
+
 export async function readExplanation(dataRoot, threadId) {
   threadDirectory(dataRoot, threadId);
-  const selection = await readJson(path.join(dataRoot, "floating", "selection.json"));
-  if (selection?.threadId !== threadId) return { threadId, status: "idle" };
+  const selection = (await retainedSelections(dataRoot)).find(item => item.threadId === threadId);
+  if (!selection) return { threadId, status: "idle" };
   const latest = await readJson(explanationFiles(dataRoot, selection).latest);
   if (!latest) return { threadId, status: selection.initialStatus || "idle" };
   const state = await readJson(explanationFiles(dataRoot, selection, latest.turnId).result) || { threadId, status: "idle" };
   if (state.workerPid && ["queued", "generating"].includes(state.status) && !isProcessRunning(state.workerPid)) {
-    return { ...state, status: "error", error: "解释后台已退出。点击“解释当前聊天”可重新生成。" };
+    return { ...state, status: "error", error: "解释后台已退出。点击“解释当前对话”可重新生成。" };
   }
   return state;
 }

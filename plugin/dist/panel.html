@@ -15,13 +15,30 @@ body{margin:0;padding:24px;line-height:1.65}header{display:flex;align-items:cent
 #explanation h1,#explanation h2,#explanation h3{font-size:1.1em;line-height:1.5;margin:1.2em 0 .55em}
 #explanation ul,#explanation ol{padding-left:1.5em;margin:.6em 0 1em}#explanation li{margin:.3em 0}
 #explanation li p{margin:.3em 0}#explanation blockquote{border-left:3px solid #ddd;color:#666;margin:1em 0;padding-left:1em}
-#explanation code{font-family:Consolas,monospace;font-size:.88em;background:#f4f4f4;border-radius:5px;padding:.12em .3em}
+#explanation code{font-family:Consolas,monospace;font-size:var(--code-font-size,12px);background:#f4f4f4;border-radius:5px;padding:.12em .3em}
 #explanation pre{overflow:auto;background:#f5f5f5;border-radius:10px;padding:12px;line-height:1.6}#explanation pre code{padding:0;background:none}
 #explanation table{border-collapse:collapse;display:block;overflow-x:auto;margin:1em 0}#explanation th,#explanation td{border:1px solid #ddd;padding:6px 10px}
 #explanation a{color:#3668ad;text-decoration:underline}#explanation hr{border:0;border-top:1px solid #e5e5e5;margin:1em 0}
 #explanation .katex{font-size:1.08em}#explanation .katex-display{overflow-x:auto;overflow-y:hidden;padding:.25em 0}
 
-</style></head><body><header><span class="dot"></span>Codex 回复解释</header><button id="reopen" type="button">打开悬浮窗</button><p id="floating-note" hidden>悬浮小窗已打开。切换聊天后，点击小窗顶部的“解释当前聊天”。关闭小窗后，可以用上方按钮重新打开。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
+#explanation .message{margin:0 0 24px}#explanation .message.user{box-sizing:border-box;max-width:92%;margin-left:auto;background:#f4f4f4;border-radius:20px;padding:12px 16px}
+#explanation .message>div>:first-child{margin-top:0}#explanation .message>div>:last-child{margin-bottom:0}
+
+.question-activity{display:flex;align-items:center;gap:8px;padding:0 0 18px;color:#858585;font-size:.9rem}
+.question-activity[hidden]{display:none}
+.question-activity .activity-label{color:transparent;background:linear-gradient(100deg,#858585 30%,#d6d6d6 48%,#858585 66%);background-size:250% 100%;background-clip:text;-webkit-background-clip:text;animation:thinking-shimmer 2s linear infinite}
+.activity-time{font-variant-numeric:tabular-nums}
+#explanation .reply-duration{margin-top:12px;color:#858585;font-size:.85rem}
+@keyframes thinking-shimmer{from{background-position:160% 0}to{background-position:-80% 0}}
+@media(prefers-reduced-motion:reduce){.question-activity .activity-label{animation:none;background:none;color:#858585}}
+
+#explanation .thinking-row{display:flex;align-items:center;gap:4px;margin:0 0 12px;color:#858585;font-size:.9rem}
+#explanation .thinking-row:not(:first-child){margin-top:16px}
+.thinking-time{font-variant-numeric:tabular-nums}
+.thinking-row.live .thinking-label{color:transparent;background:linear-gradient(100deg,#858585 30%,#d6d6d6 48%,#858585 66%);background-size:250% 100%;background-clip:text;-webkit-background-clip:text;animation:thinking-shimmer 2s linear infinite}
+@media(prefers-reduced-motion:reduce){.thinking-row.live .thinking-label{animation:none;background:none;color:#858585}}
+
+</style></head><body><header><span class="dot"></span>Codex 回复解释</header><button id="reopen" type="button">打开悬浮窗</button><p id="floating-note" hidden>悬浮小窗已打开。发消息时自动跟随聊天；点击解释页底部的“解释当前对话”后才会生成解释。关闭小窗后，可以用上方按钮重新打开。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
 <script type="module">var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
@@ -43396,7 +43413,7 @@ document.querySelector("#reopen").onclick = async (event) => {
     button.disabled = false;
   }
 };
-await refresh("reply_explainer.explain_latest");
+await refresh();
 setInterval(() => refresh(), 2e3);
 /*! Bundled license information:
 

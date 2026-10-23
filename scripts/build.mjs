@@ -1,6 +1,7 @@
 import { build } from "esbuild";
-import { mkdir, readFile, writeFile, cp, readdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, cp, readdir, rm } from "node:fs/promises";
 await mkdir("dist", { recursive: true });
+await rm("dist/stop.mjs", { force: true });
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 const temporary = path.resolve(".local/build-tmp");
@@ -10,14 +11,13 @@ execFileSync(path.join(framework, "csc.exe"), ["/nologo", "/target:winexe", "/pl
   "/reference:" + path.join(framework, "WPF/PresentationFramework.dll"),
   "/reference:" + path.join(framework, "WPF/PresentationCore.dll"),
   "/reference:" + path.join(framework, "WPF/WindowsBase.dll"),
-  "/reference:" + path.join(framework, "System.Windows.Forms.dll"),
   "/reference:" + path.join(framework, "System.Xaml.dll"),
   "/reference:" + path.join(framework, "System.Web.Extensions.dll"),
   "/reference:" + path.resolve("vendor/webview2/lib/net462/Microsoft.Web.WebView2.Core.dll"),
   "/reference:" + path.resolve("vendor/webview2/lib/net462/Microsoft.Web.WebView2.Wpf.dll"),
-  path.resolve("src/floating.cs"), path.resolve("src/markdown-view.cs")],
+  path.resolve("src/floating.cs"), path.resolve("src/markdown-view.cs"), path.resolve("src/desktop-fonts.cs"), path.resolve("src/desktop-chat.cs")],
   { env: { ...process.env, TMP: temporary, TEMP: temporary }, windowsHide: true, stdio: "inherit" });
-await build({ entryPoints: ["src/server.mjs", "src/stop.mjs", "src/request.mjs", "src/question-request.mjs", "src/start.mjs", "src/open-installed.mjs", "src/worker.mjs"], outdir: "dist", bundle: true, platform: "node", format: "esm", target: "node22", outExtension: { ".js": ".mjs" } });
+await build({ entryPoints: ["src/server.mjs", "src/current-chat.mjs", "src/request.mjs", "src/question-request.mjs", "src/start.mjs", "src/open-installed.mjs", "src/worker.mjs"], outdir: "dist", bundle: true, platform: "node", format: "esm", target: "node22", outExtension: { ".js": ".mjs" } });
 for (const name of ["Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.Wpf.dll"])
   await cp("vendor/webview2/lib/net462/" + name, "dist/" + name);
 await cp("vendor/webview2/runtimes/win-x64/native/WebView2Loader.dll", "dist/WebView2Loader.dll");

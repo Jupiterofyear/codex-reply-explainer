@@ -72,6 +72,65 @@ test("latest pointer prevents an older explanation replacing a newer one", async
   assert.throws(() => threadDirectory(testRoot, "../outside"), /无效/);
 });
 
+test("desktop selection resolves the displayed name without writing the source database", async () => {
+ const { readThreadIdByName } = await import("../src/floating.mjs");
+ const { DatabaseSync } = await import("node:sqlite");
+ const source=path.join(testRoot,"desktop-selection"); await mkdir(source);
+ const database=new DatabaseSync(path.join(source,"state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT)");
+ const insert=database.prepare("INSERT INTO threads VALUES (?, ?, ?)");
+ insert.run(first,"聊天名称","过期标题");insert.run(second,null,"未改名的聊天");database.close();
+ const before=await readFile(path.join(source,"state_5.sqlite"));
+ assert.equal(await readThreadIdByName(source,"聊天名称"),first);
+ assert.equal(await readThreadIdByName(source,"未改名的聊天"),second);
+ await assert.rejects(readThreadIdByName(source,"过期标题"),/没有本地记录/);
+ await assert.rejects(readThreadIdByName(source,"' OR 1=1 --"),/没有本地记录/);
+ assert.deepEqual(await readFile(path.join(source,"state_5.sqlite")),before);
+});
+
+test("duplicate displayed names are rejected instead of choosing another conversation", async () => {
+ const { readThreadIdByName } = await import("../src/floating.mjs");
+ const { DatabaseSync } = await import("node:sqlite");
+ const source=path.join(testRoot,"duplicate-selection");await mkdir(source);
+ const database=new DatabaseSync(path.join(source,"state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT)");
+ const insert=database.prepare("INSERT INTO threads VALUES (?, ?, ?)");
+ insert.run(first,"同名聊天","a");insert.run(second,"同名聊天","b");database.close();
+ await assert.rejects(readThreadIdByName(source,"同名聊天"),/同名聊天/);
+});
+
+test("desktop selection helper reads UTF-8 JSON and returns only the matched id", async () => {
+ const { DatabaseSync } = await import("node:sqlite");
+ const source=path.join(testRoot,"selection-helper");await mkdir(source);
+ const database=new DatabaseSync(path.join(source,"state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT)");
+ database.prepare("INSERT INTO threads VALUES (?, ?, ?)").run(first,'中文 \"特殊\" 聊天',"old");database.close();
+ const child=spawn(process.execPath,["--disable-warning=ExperimentalWarning","dist/current-chat.mjs",source],{cwd:root,windowsHide:true,stdio:["pipe","pipe","pipe"]});
+ let stdout="",stderr="";child.stdout.on("data",x=>stdout+=x);child.stderr.on("data",x=>stderr+=x);
+ child.stdin.end(JSON.stringify('中文 \"特殊\" 聊天'));
+ assert.equal(await new Promise(resolve=>child.once("exit",resolve)),0,stderr);
+ assert.equal(stdout.trim(),first);assert.equal(stderr,"");
+});
+
+test("the installed plugin has no lifecycle hook requiring review", async () => {
+ assert.deepEqual(JSON.parse(await readFile("hooks/hooks.json","utf8")),{hooks:{}});
+ assert.equal(JSON.parse(await readFile(".codex-plugin/plugin.json","utf8")).hooks,undefined);
+});
+
+test("following a desktop selection updates the chat without starting a backend", async () => {
+ const { DatabaseSync } = await import("node:sqlite");
+ const source=path.join(testRoot,"follow-only-source"),data=path.join(testRoot,"follow-only-data");await mkdir(source);
+ const database=new DatabaseSync(path.join(source,"state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT)");
+ database.prepare("INSERT INTO threads VALUES (?, ?, ?)").run(second,"切换后的聊天","second");database.close();
+ await seedWindow(data,first);
+ const child=spawn(process.execPath,["--disable-warning=ExperimentalWarning","dist/request.mjs",data,source,second,"follow"],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"]});
+ let stderr="";child.stderr.on("data",x=>stderr+=x);assert.equal(await new Promise(resolve=>child.once("exit",resolve)),0,stderr);
+ assert.equal((await readJson(path.join(data,"floating/selection.json"))).threadId,second);
+ await assert.rejects(access(path.join(data,"backend")),{code:"ENOENT"});
+ assert.deepEqual((await readdir(path.join(data,"floating"))).sort(),["chats.json","selection.json","window.json"]);
+});
+
 test("MCP panel is app-only, uses host thread metadata, and returns no model content", async () => {
   const selection = await seedWindow(testRoot, first);
   await seedResult(testRoot, selection, "current", { status: "ready", text: "PRIVATE_EXPLANATION" });
@@ -109,37 +168,6 @@ test("MCP panel is app-only, uses host thread metadata, and returns no model con
   } finally {
     await client.close();
   }
-});
-
-test("empty Stop event has no output, files, or model generation", async () => {
-  const data = path.join(testRoot, "empty-hook");
-  const child = spawn(process.execPath, ["dist/stop.mjs"], { cwd: root, env: { ...process.env, REPLY_EXPLAINER_DATA_DIR: data }, stdio: ["pipe", "pipe", "pipe"] });
-  let stdout = "", stderr = "";
-  child.stdout.on("data", chunk => stdout += chunk);
-  child.stderr.on("data", chunk => stderr += chunk);
-  child.stdin.end(JSON.stringify({ hook_event_name: "Stop", session_id: first, turn_id: "empty", last_assistant_message: null }));
-  const code = await new Promise(resolve => child.once("exit", resolve));
-  assert.equal(code, 0);
-  assert.equal(stdout, "");
-  assert.equal(stderr, "");
-  await assert.rejects(access(data), { code: "ENOENT" });
-});
-
-test("configured Windows hook starts through the Windows command shell without producing output", { skip: process.platform !== "win32" }, async () => {
-  const hook = JSON.parse(await readFile("hooks/hooks.json", "utf8")).hooks.Stop[0].hooks[0];
-  const command = hook.command.replaceAll("${PLUGIN_ROOT}", root);
-  const child = spawn("cmd.exe", ["/c", '"' + command + '"'], {
-    cwd: root, windowsHide: true, windowsVerbatimArguments: true, stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, REPLY_EXPLAINER_DATA_DIR: path.join(testRoot, "shell-hook") }
-  });
-  let stdout = "", stderr = "";
-  child.stdout.on("data", chunk => stdout += chunk);
-  child.stderr.on("data", chunk => stderr += chunk);
-  child.stdin.end(JSON.stringify({ hook_event_name: "Stop", session_id: first, turn_id: "empty", last_assistant_message: null }));
-  const code = await new Promise(resolve => child.once("exit", resolve));
-  assert.equal(code, 0, stderr);
-  assert.equal(stdout, "");
-  assert.equal(stderr, "");
 });
 
 test("built panel script has valid JavaScript after HTML assembly", async () => {
@@ -255,20 +283,6 @@ test("opening an existing chat selects its latest completed reply and preserves 
   assert.equal(await latestReplyEvent(testRoot, "00000000-0000-4000-8000-000000000003"), null);
 });
 
-test("temporary branches without saved history produce no files or output", async () => {
-  const data = path.join(testRoot, "temporary-hook");
-  const child = spawn(process.execPath, ["dist/stop.mjs"], { cwd: root, env: { ...process.env, REPLY_EXPLAINER_DATA_DIR: data }, stdio: ["pipe", "pipe", "pipe"] });
-  let stdout = "", stderr = "";
-  child.stdout.on("data", chunk => stdout += chunk);
-  child.stderr.on("data", chunk => stderr += chunk);
-  child.stdin.end(JSON.stringify({ hook_event_name: "Stop", session_id: first, turn_id: "temporary", transcript_path: null, last_assistant_message: "Temporary prediction" }));
-  const code = await new Promise(resolve => child.once("exit", resolve));
-  assert.equal(code, 0);
-  assert.equal(stdout, "");
-  assert.equal(stderr, "");
-  await assert.rejects(access(data), { code: "ENOENT" });
-});
-
 
 test("floating window title uses the saved chat name without modifying the database", async () => {
   const { DatabaseSync } = await import("node:sqlite");
@@ -282,11 +296,11 @@ test("floating window title uses the saved chat name without modifying the datab
   database.prepare("INSERT INTO threads VALUES (?, ?, ?)").run(second, null, "未重命名的聊天");
   database.close();
   const before = await readFile(databaseFile);
-  assert.equal(readThreadName(home, first), '聊天名称 <不是指令> "中文"');
-  assert.equal(readThreadName(home, second), "未重命名的聊天");
+  assert.equal(await readThreadName(home, first), '聊天名称 <不是指令> "中文"');
+  assert.equal(await readThreadName(home, second), "未重命名的聊天");
   assert.deepEqual(await readFile(databaseFile), before);
-  assert.throws(() => readThreadName(home, "../other"), /无效/);
-  assert.throws(() => readThreadName(home, "00000000-0000-4000-8000-000000000003"), /没有找到/);
+  await assert.rejects(readThreadName(home, "../other"), /无效/);
+  await assert.rejects(readThreadName(home, "00000000-0000-4000-8000-000000000003"), /没有找到/);
 });
 
 async function fakeSource(name, id = first) {
@@ -323,6 +337,16 @@ async function untilFile(file) {
 const framework=path.join(process.env.WINDIR,"Microsoft.NET/Framework64/v4.0.30319");
 const fakeCli=path.join(testRoot,"fake-app-server.exe");
 execFileSync(path.join(framework,"csc.exe"),["/nologo","/target:exe","/out:"+fakeCli,"/reference:"+path.join(framework,"System.Web.Extensions.dll"),path.join(root,"test/fake-app-server.cs")],{windowsHide:true,env:{...process.env,TMP:testRoot,TEMP:testRoot}});
+test("desktop font sizes come from Codex settings and ignore other sections",async()=>{
+ const source=path.join(testRoot,"font-settings-test.cs"),exe=path.join(testRoot,"font-settings-test.exe"),config=path.join(testRoot,"font-settings.toml");
+ await writeFile(source,'using System; class CheckFonts { static void Main(string[] args) { var fonts=DesktopFonts.Read(args[0]); Console.WriteLine(fonts.Sans+","+fonts.Code); } }');
+ execFileSync(path.join(framework,"csc.exe"),["/nologo","/target:exe","/out:"+exe,source,path.join(root,"src/desktop-fonts.cs")],{windowsHide:true,env:{...process.env,TMP:testRoot,TEMP:testRoot}});
+ const read=()=>execFileSync(exe,[config],{windowsHide:true,encoding:"utf8"}).trim();
+ assert.equal(read(),"14,12");
+ await writeFile(config,'sansFontSize = 30\n[desktop]\nsansFontSize = 15 # UI\ncodeFontSize = 15\n[other]\nsansFontSize = 40\n');assert.equal(read(),"15,15");
+ await writeFile(config,'[desktop]\r\nsansFontSize = 13\r\ncodeFontSize = 11.5\r\n');assert.equal(read(),"13,11.5");
+});
+
 async function until(check) {
  const deadline=Date.now()+30000;
  while(Date.now()<deadline){const value=await check();if(value)return value;await new Promise(r=>setTimeout(r,30));}
@@ -350,7 +374,7 @@ async function newer(worker){
  return {...worker.event,turn_id:"newer",last_assistant_message:"NEWER_CONDITION"};
 }
 async function stopWorker(worker){
- await rm(path.join(worker.data,"floating/window.json"),{force:true});await rm(path.join(worker.data,"floating/selection.json"),{force:true});
+ await rm(path.join(worker.data,"floating/window.json"),{force:true});await rm(path.join(worker.data,"floating/selection.json"),{force:true});await rm(path.join(worker.data,"floating/chats.json"),{force:true});
  await until(()=>worker.child.exitCode!==null);
  assert.equal(worker.child.exitCode,0,worker.stderr);
  await assert.rejects(access(path.join(worker.data,"backend")),{code:"ENOENT"});
@@ -365,67 +389,154 @@ async function registerSource(w) {
  return await readJson(path.join(w.data,"floating/selection.json"));
 }
 async function questionReady(w, selection) {
- return await until(async()=>{const control=await readJson(questionFiles(w.data,selection).control),s=await readJson(questionFiles(w.data,selection).result);return s?.requestId===control?.requestId&&["ready","error"].includes(s?.status)&&s;});
+ return await until(async()=>{const control=await readJson(questionFiles(w.data,selection).control),s=await readJson(questionFiles(w.data,selection).result);return s?.requestId===control?.requestId&&["ready","error","stopped"].includes(s?.status)&&s;});
 }
 
-test("questions reuse one ephemeral branch across turns and new main replies; reset imports latest context",async()=>{
+test("questions refresh the fork only on send, preserve past discussion once, and reset clears it",async()=>{
+ const {questionPrompt}=await import("../src/context.mjs");
  const w=await launchWorker("question-multiple");const selection=await registerSource(w);
  const original=await readFile(w.transcript),databaseBefore=await readFile(path.join(w.source,"state_5.sqlite"));
  await submitQuestion(w.data,selection.openId,"ask","第一问：结合我的偏好回答");
  const a=await questionReady(w,selection);assert.equal(a.status,"ready",a.error);assert.equal(a.messages.length,2);
  assert.deepEqual(await readFile(w.transcript),original);assert.deepEqual(await readFile(path.join(w.source,"state_5.sqlite")),databaseBefore);
  const same=await selectChat(w.data,first,"同一聊天");assert.equal(same.openId,selection.openId);
- await enqueueStop(await newer(w),{dataRoot:w.data});await ready(w,"newer");
  await submitQuestion(w.data,selection.openId,"ask","第二问：继续刚才的讨论");
- const b=await questionReady(w,selection);assert.equal(b.status,"ready",b.error);assert.equal(b.branchId,a.branchId);assert.equal(b.messages.length,4);assert.equal(b.sourceTurnId,"done");
- const calls=await records(w),fork=calls.find(x=>x.method==="thread/fork");
+ const b=await questionReady(w,selection);assert.equal(b.status,"ready",b.error);assert.equal(b.branchId,a.branchId);assert.equal(b.messages.length,4);
+ await enqueueStop(await newer(w),{dataRoot:w.data});await ready(w,"newer");
+ assert.deepEqual(await readJson(questionFiles(w.data,selection).result),b);
+ await submitQuestion(w.data,selection.openId,"ask","第三问：主聊天现在进展如何？");
+ const c=await questionReady(w,selection);assert.equal(c.status,"ready",c.error);assert.notEqual(c.branchId,a.branchId);assert.equal(c.messages.length,6);assert.equal(c.sourceTurnId,"newer");
+ assert.deepEqual(c.messages.slice(0,4),b.messages);assert.equal(c.messages[4].sourceTurnId,"newer");
+ const calls=await records(w),forks=calls.filter(x=>x.method==="thread/fork"&&x.input.developerInstructions),fork=forks[0];
+ assert.equal(forks.length,2);assert.equal(fork.input.developerInstructions,questionPrompt);assert.match(questionPrompt,/不代表当前真实进度/);assert.match(questionPrompt,/以最新主对话的证据为准/);
  assert.equal(fork.input.ephemeral,true);assert.equal(fork.input.sandbox,"read-only");assert.equal(fork.input.config["plugins.codex-app-tools@openai-bundled.enabled"],false);assert.equal(fork.input.config["mcp_servers.example.enabled"],false);
  assert.equal(calls.find(x=>x.method==="config/read").input.cwd,w.source);assert.equal(fork.input.config["mcp_servers.project_only.enabled"],false);
- const turns=calls.filter(x=>x.method==="turn/start"&&x.input.threadId===a.branchId);assert.equal(turns.length,2);assert.equal(turns[1].prompt,"第二问：继续刚才的讨论");
- assert.equal(calls.filter(x=>x.method==="thread/fork").length,2);
+ const turns=calls.filter(x=>x.method==="turn/start"&&x.input.threadId===a.branchId);assert.equal(turns.length,2);assert.equal(turns[0].prompt,a.messages[0].text);assert.equal(turns[1].prompt,b.messages[2].text);
+ const refreshed=calls.find(x=>x.method==="turn/start"&&x.input.threadId===c.branchId);
+ const historyLine=refreshed.prompt.split("\n")[1];assert.deepEqual(JSON.parse(historyLine),{past_window_discussion:b.messages});
+ assert.ok(refreshed.prompt.endsWith("本次用户问题：\n"+c.messages[4].text));assert.doesNotMatch(refreshed.prompt,/简洁、无防御性/);
+ assert.match(forks[1].input.snapshot,/NEWER_CONDITION/);assert.doesNotMatch(forks[1].input.snapshot,/第一问|第二问|do not inherit this unfinished turn/);
+ assert.equal(calls.filter(x=>x.method==="thread/fork").length,3);
+ assert.ok(calls.some(x=>x.method==="thread/unsubscribe"&&x.input.threadId===a.branchId));
+ await submitQuestion(w.data,selection.openId,"ask","第四问：继续");
+ const d=await questionReady(w,selection);assert.equal(d.status,"ready",d.error);assert.equal(d.branchId,c.branchId);assert.equal(d.messages.length,8);
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start").at(-1).prompt,"第四问：继续");
+ // A second refresh carries visible Q&A, never the previous imported main snapshot or its wrapper.
+ const nextBase=snapshotThroughTurn(await readFile(w.transcript,"utf8"),"newer").text;
+ await writeFile(w.transcript,nextBase+[{type:"turn_context",payload:{turn_id:"newest",cwd:w.source,model:"source-model",effort:"high"}},{type:"response_item",payload:{type:"message",role:"assistant",content:[{text:"LATEST_PROGRESS"}]}},{type:"event_msg",payload:{type:"task_complete",turn_id:"newest"}}].map(JSON.stringify).join("\n")+"\n");
+ const sourceAfter=await readFile(w.transcript);
+ await submitQuestion(w.data,selection.openId,"ask","第五问：新进度");
+ const e=await questionReady(w,selection);assert.equal(e.status,"ready",e.error);assert.notEqual(e.branchId,d.branchId);assert.equal(e.messages.length,10);
+ const refreshedAgain=(await records(w)).filter(x=>x.method==="turn/start").at(-1);
+ assert.deepEqual(JSON.parse(refreshedAgain.prompt.split("\n")[1]),{past_window_discussion:d.messages});
+ assert.doesNotMatch(refreshedAgain.prompt,/NEWER_CONDITION|LATEST_PROGRESS/);assert.deepEqual(await readFile(w.transcript),sourceAfter);
  await submitQuestion(w.data,selection.openId,"reset");
  await until(async()=> (await readJson(questionFiles(w.data,selection).result))?.status==="idle");
  await submitQuestion(w.data,selection.openId,"ask","从最新回复重新开始");
- const c=await questionReady(w,selection);assert.equal(c.status,"ready",c.error);assert.notEqual(c.branchId,a.branchId);assert.equal(c.messages.length,2);assert.equal(c.sourceTurnId,"newer");
- assert.ok((await records(w)).some(x=>x.method==="thread/unsubscribe"&&x.input.threadId===a.branchId));
- await assert.rejects(access(path.join(w.data,"backend/home/auth.json")),{code:"ENOENT"});assert.deepEqual(await readdir(path.join(w.data,"backend/home/sessions")),[]);
+ const f=await questionReady(w,selection);assert.equal(f.status,"ready",f.error);assert.notEqual(f.branchId,e.branchId);assert.equal(f.messages.length,2);assert.equal(f.sourceTurnId,"newest");
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start").at(-1).prompt,"从最新回复重新开始");
+ await assert.rejects(access(path.join(w.data,"backend/questions/home/auth.json")),{code:"ENOENT"});assert.deepEqual(await readdir(path.join(w.data,"backend/questions/home/sessions")),[]);
  await stopWorker(w);assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("questions-")).length,0);
 });
 
-test("reset interrupts a question, preserves queued explanation and rejects a duplicate send",async()=>{
+test("explanations finish during a question; reset interrupts only the question and rejects a duplicate send",async()=>{
  const w=await launchWorker("question-reset");const selection=await registerSource(w);
  await submitQuestion(w.data,selection.openId,"ask","WAIT_QUESTION");await started(w);
  await assert.rejects(submitQuestion(w.data,selection.openId,"ask","duplicate"),/等待/);
  await enqueueStop(w.event,{dataRoot:w.data});
- assert.equal((await readExplanation(w.data,first)).status,"queued");
- await submitQuestion(w.data,selection.openId,"reset");
  const explain=await ready(w);assert.equal(explain.status,"ready",explain.error);
+ assert.equal((await readJson(questionFiles(w.data,selection).result)).status,"generating");
+ await submitQuestion(w.data,selection.openId,"reset");
  await submitQuestion(w.data,selection.openId,"ask","reset question");const answer=await questionReady(w,selection);assert.equal(answer.status,"ready",answer.error);assert.equal(answer.messages.length,2);
  assert.equal(answer.messages[0].text,"reset question");assert.ok((await records(w)).filter(x=>x.method==="thread/unsubscribe").length>=2);
  await stopWorker(w);
 });
 
-test("a question waits for the active explanation and is not lost when a newer reply cancels it",async()=>{
- const w=await launchWorker("question-queued","WAIT_FOR_CANCEL");const selection=await registerSource(w);
+test("questions start in a separate backend while an explanation is generating",async()=>{
+ const w=await launchWorker("question-parallel","WAIT_FOR_CANCEL");const selection=await registerSource(w);
+ assert.notEqual(w.state.backendPid,w.state.questionBackendPid);
  await enqueueStop(w.event,{dataRoot:w.data});await started(w);
- await submitQuestion(w.data,selection.openId,"ask","queued question");
+ await submitQuestion(w.data,selection.openId,"ask","parallel question");
+ await until(async()=> (await records(w)).filter(x=>x.method==="turn/start").length===2);
+ const turns=(await records(w)).filter(x=>x.method==="turn/start");
+ assert.equal(turns[0].pid,w.state.backendPid);assert.equal(turns[1].pid,w.state.questionBackendPid);
+ assert.notEqual(turns[0].input.threadId,turns[1].input.threadId);
+ assert.equal((await readExplanation(w.data,first)).status,"generating");
+ assert.equal((await readJson(questionFiles(w.data,selection).result)).status,"generating");
  await enqueueStop(await newer(w),{dataRoot:w.data});
- const answer=await questionReady(w,selection);assert.equal(answer.status,"ready",answer.error);assert.equal(answer.sourceTurnId,"newer");
- assert.equal((await ready(w,"newer")).status,"ready");await stopWorker(w);
+ assert.equal((await ready(w,"newer")).status,"ready");
+ // Updating the explanation must not cancel or recreate the active question.
+ assert.equal((await readJson(questionFiles(w.data,selection).result)).status,"generating");
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start"&&x.pid===w.state.questionBackendPid).length,1);
+ await stopWorker(w);
+ assert.throws(()=>process.kill(w.state.backendPid,0),{code:"ESRCH"});
+ assert.throws(()=>process.kill(w.state.questionBackendPid,0),{code:"ESRCH"});
 });
 
-test("switching or closing during a question removes its branch and question files",async()=>{
- const w=await launchWorker("question-switch");const selection=await registerSource(w);
- await submitQuestion(w.data,selection.openId,"ask","WAIT_QUESTION");await started(w);
- const branch=(await records(w)).find(x=>x.method==="turn/start").input.threadId;
- await selectChat(w.data,second,"另一个聊天");
- await until(async()=> (await records(w)).some(x=>x.method==="thread/unsubscribe"&&x.input.threadId===branch));
- await assert.rejects(access(questionFiles(w.data,selection).result),{code:"ENOENT"});await assert.rejects(access(questionFiles(w.data,selection).control),{code:"ENOENT"});
- await assert.rejects(submitQuestion(w.data,selection.openId,"ask","stale click"),/切换或关闭/);
- const back=await selectChat(w.data,first,"回来");await submitQuestion(w.data,back.openId,"ask","WAIT_QUESTION");
+test("chat tabs retain in-flight and completed explanations, questions and separate branches",async()=>{
+ const w=await launchWorker("question-switch","LOCK_STREAM");const selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","第一个聊天的问题");await started(w);
+ await enqueueStop(w.event,{dataRoot:w.data});
  await until(async()=> (await records(w)).filter(x=>x.method==="turn/start").length===2);
- await stopWorker(w);assert.throws(()=>process.kill(w.state.backendPid,0),{code:"ESRCH"});
+ const waiting=await until(async()=>{const state=await readJson(questionFiles(w.data,selection).result);return state?.phase==="thinking"&&state;});
+ assert.equal(waiting.startedAt,(await readJson(questionFiles(w.data,selection).control)).submittedAt);
+ const next=await fakeSource("question-switch",second);
+ const {DatabaseSync}=await import("node:sqlite");const db=new DatabaseSync(path.join(w.source,"state_5.sqlite"));db.prepare("INSERT INTO threads VALUES (?, ?)").run(second,next.transcript);db.close();
+ const other=await selectChat(w.data,second,"另一个聊天");
+ await assert.rejects(submitQuestion(w.data,selection.openId,"ask","stale click"),/切换或关闭/);
+ await writeFile(path.join(w.data,"stream-gate"),"go");
+ const partial=await until(async()=>{const state=await readJson(questionFiles(w.data,selection).result);return state?.partial&&state;});assert.equal(partial.startedAt,waiting.startedAt);
+ const a=await questionReady(w,selection);assert.equal(a.status,"ready",a.error);
+ assert.equal(a.startedAt,waiting.startedAt);assert.ok(a.elapsedMs>0);assert.ok(Date.parse(a.completedAt)>=Date.parse(a.startedAt));assert.ok(a.messages.at(-1).elapsedMs>0);
+ assert.equal((await ready(w)).status,"ready");
+ assert.equal((await records(w)).filter(x=>x.method==="thread/unsubscribe"&&x.input.threadId===a.branchId).length,0);
+ await submitQuestion(w.data,other.openId,"ask","第二个聊天的问题");const b=await questionReady(w,other);assert.equal(b.status,"ready",b.error);assert.notEqual(a.branchId,b.branchId);assert.equal(b.messages.length,2);
+ await enqueueStop(next.event,{dataRoot:w.data});await until(async()=> (await readExplanation(w.data,second)).status==="ready");
+ const back=await selectChat(w.data,first,"回来");assert.equal(back.openId,selection.openId);
+ assert.deepEqual(await readJson(questionFiles(w.data,back).result),a);assert.equal((await readExplanation(w.data,first)).text,"FAKE_EXPLANATION");
+ await submitQuestion(w.data,back.openId,"ask","第一个聊天的追问");const c=await questionReady(w,back);assert.equal(c.status,"ready",c.error);assert.equal(c.branchId,a.branchId);assert.equal(c.messages.length,4);assert.deepEqual(c.messages.slice(0,2),a.messages);
+ assert.equal((await readJson(path.join(w.data,"floating/chats.json"))).selections.length,2);
+ assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("result-")).length,2);
+ await submitQuestion(w.data,back.openId,"reset");await until(async()=> (await readJson(questionFiles(w.data,back).result))?.status==="idle");
+ assert.deepEqual(await readJson(questionFiles(w.data,other).result),b);
+ await selectChat(w.data,second,"另一个聊天");assert.deepEqual(await readJson(questionFiles(w.data,other).result),b);
+ await stopWorker(w);assert.throws(()=>process.kill(w.state.questionBackendPid,0),{code:"ESRCH"});
  assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("questions-")).length,0);
+});
+
+test("stop preserves received text and permits follow-up from a fresh fork without affecting explanations",async()=>{
+ const w=await launchWorker("question-stop");const selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","PARTIAL_STOP");
+ const streaming=await until(async()=>{const state=await readJson(questionFiles(w.data,selection).result);return state?.partial&&state;});
+ assert.equal(streaming.phase,"answering");assert.ok(streaming.thinking[0].elapsedMs>=0);
+ const oldBranch=(await records(w)).find(x=>x.method==="turn/start").input.threadId;
+ await enqueueStop(w.event,{dataRoot:w.data});assert.equal((await ready(w)).status,"ready");
+ await submitQuestion(w.data,selection.openId,"stop");const stopped=await questionReady(w,selection);
+ assert.equal(stopped.status,"stopped",stopped.error);assert.equal(stopped.error,undefined);assert.equal(stopped.messages.length,2);assert.equal(stopped.messages[1].text,streaming.partial);assert.equal(stopped.messages[1].stopped,true);assert.ok(stopped.messages[1].elapsedMs>0);assert.deepEqual(stopped.thinking,[]);
+ const interrupted=(await records(w)).filter(x=>x.method==="turn/interrupt");assert.equal(interrupted.length,1);assert.equal(interrupted[0].pid,w.state.questionBackendPid);
+ assert.ok((await records(w)).some(x=>x.method==="thread/unsubscribe"&&x.input.threadId===oldBranch));
+ await submitQuestion(w.data,selection.openId,"ask","继续刚才被停止的讨论");const continued=await questionReady(w,selection);assert.equal(continued.status,"ready",continued.error);assert.notEqual(continued.branchId,oldBranch);assert.deepEqual(continued.messages.slice(0,2),stopped.messages);
+ const prompt=(await records(w)).filter(x=>x.method==="turn/start").at(-1).prompt;assert.deepEqual(JSON.parse(prompt.split("\n")[1]).past_window_discussion,stopped.messages);
+ await submitQuestion(w.data,selection.openId,"stop");assert.deepEqual(await readJson(questionFiles(w.data,selection).result),continued);
+ await submitQuestion(w.data,selection.openId,"ask","WAIT_QUESTION");await until(async()=> (await readJson(questionFiles(w.data,selection).result))?.phase==="thinking" && (await readJson(questionFiles(w.data,selection).result))?.status==="generating");
+ await submitQuestion(w.data,selection.openId,"stop");const empty=await questionReady(w,selection);assert.equal(empty.status,"stopped");assert.equal(empty.messages.at(-1).text,"");assert.equal(empty.messages.at(-1).stopped,true);assert.ok(empty.messages.at(-1).thinking.every(stage=>Number.isFinite(stage.elapsedMs)));
+ await stopWorker(w);
+});
+
+test("stop before processing saves the question without starting model generation",async()=>{
+ const {QuestionsSession}=await import("../src/questions.mjs");const data=path.join(testRoot,"stop-pending"),selection=await seedWindow(data,first);
+ await submitQuestion(data,selection.openId,"ask","还在准备的问题");await submitQuestion(data,selection.openId,"stop");
+ const session=new QuestionsSession({dataRoot:data,sourceHome:path.join(testRoot,"unused-source"),backend:{home:path.join(testRoot,"unused-backend")}});
+ await session.process(selection);const result=await readJson(questionFiles(data,selection).result);assert.equal(result.status,"stopped");assert.equal(result.messages[0].text,"还在准备的问题");assert.equal(result.messages[1].stopped,true);assert.deepEqual(result.messages[1].thinking,[]);
+});
+
+test("thinking events after an output paragraph preserve all agent messages and record the new position",async()=>{
+ const w=await launchWorker("question-phases");const selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","MULTIPHASE");
+ const thinking=await until(async()=>{const state=await readJson(questionFiles(w.data,selection).result);return state?.thinking?.length===2&&state.phase==="thinking"&&state;});
+ assert.equal(thinking.partial,"第一段已生成。");assert.equal(thinking.thinking[1].offset,thinking.partial.length);assert.ok(thinking.thinking[0].elapsedMs>=0);assert.equal(thinking.thinking[1].elapsedMs,undefined);
+ const result=await questionReady(w,selection);assert.equal(result.status,"ready",result.error);assert.equal(result.messages.at(-1).text,"第一段已生成。\n\n第二段完整回答。");assert.equal(result.messages.at(-1).thinking.length,2);assert.ok(result.messages.at(-1).thinking.every(stage=>Number.isFinite(stage.elapsedMs)));assert.doesNotMatch(JSON.stringify(result),/INTERNAL_REASONING/);
+ await stopWorker(w);
 });
 
 test("failed questions keep their visible error and require an explicit reset",async()=>{
@@ -467,10 +578,13 @@ test("a newer queued reply cancels the old turn and keeps the same backend",asyn
  assert.deepEqual(await readdir(path.join(w.data,"runs")),[]);assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("result-")).length,1);await stopWorker(w);
 });
 
-test("switching chats discards the old answer and reuses the backend for the new chat",async()=>{
- const w=await launchWorker("switch-source","WAIT_FOR_CANCEL");await enqueueStop(w.event,{dataRoot:w.data});await started(w);
+test("switching chat tabs preserves both explanations and reuses the backend",async()=>{
+ const w=await launchWorker("switch-source");await enqueueStop(w.event,{dataRoot:w.data});const firstAnswer=await ready(w);
+ const firstSelection=await readJson(path.join(w.data,"floating/selection.json"));
  const next=await fakeSource("switch-source",second);await selectChat(w.data,second,"第二段聊天");await enqueueStop(next.event,{dataRoot:w.data});
- const state=await until(async()=>{const s=await readExplanation(w.data,second);return s.status==="ready"&&s;});assert.equal(state.backendPid,w.state.backendPid);assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("result-")).length,1);await stopWorker(w);
+ const state=await until(async()=>{const s=await readExplanation(w.data,second);return s.status==="ready"&&s;});assert.equal(state.backendPid,w.state.backendPid);
+ const back=await selectChat(w.data,first,"第一段聊天");assert.equal(back.openId,firstSelection.openId);assert.deepEqual(await readExplanation(w.data,first),firstAnswer);
+ assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.startsWith("result-")).length,2);await stopWorker(w);
 });
 
 test("closing during generation terminates backend and child processes and removes all temporary data",async()=>{
@@ -574,7 +688,7 @@ test("the floating request restarts a dead worker for the same chat and cleans a
  await rm(path.join(w.data,"floating/window.json"));
  await until(async()=>!await liveWorker(w.data));
  await until(async()=>{try{await access(path.join(w.data,"backend"));return false;}catch(error){if(error.code!=="ENOENT")throw error;return true;}});
- assert.equal(JSON.parse(await readFile(path.join(w.data,"worker-exit.json"),"utf8")).code,0);
+ assert.equal(JSON.parse(await untilFile(path.join(w.data,"worker-exit.json"))).code,0);
  assert.equal(await readFile(path.join(w.source,"plugins/cache/sentinel.txt"),"utf8"),"KEEP_INSTALLED_PLUGIN");
 });
 
@@ -596,5 +710,31 @@ test("a persistent file lock reports an error without exiting and the same reply
  const retried=await ready(w); assert.equal(retried.status,"ready",retried.error); assert.equal(retried.text,"FAKE_EXPLANATION");
  assert.equal((await records(w)).filter(x=>x.method==="thread/fork").length,2);
  assert.equal((await readdir(path.join(w.data,"floating"))).filter(x=>x.endsWith(".tmp")).length,0);
+ await stopWorker(w);
+});
+
+
+test("select-only request does not generate; an explicit explanation request generates the latest reply", async () => {
+ const w = await launchWorker("manual-explanation-source");
+ const { DatabaseSync } = await import("node:sqlite");
+ const database = new DatabaseSync(path.join(w.source, "state_5.sqlite"));
+ database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, name TEXT, title TEXT, rollout_path TEXT NOT NULL)");
+ database.prepare("INSERT INTO threads VALUES (?, ?, ?, ?)").run(first, "手动解释", "test", w.transcript);
+ database.close();
+ const original = await readFile(w.transcript);
+ const request = async action => {
+  const child = spawn(process.execPath, ["dist/request.mjs", w.data, w.source, first, action], {
+   cwd: root, windowsHide: true, stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, CODEX_CLI_PATH: fakeCli }
+  });
+  let stderr = ""; child.stderr.on("data", chunk => stderr += chunk);
+  assert.equal(await new Promise(resolve => child.once("exit", resolve)), 0, stderr);
+ };
+ await request("select");
+ assert.equal((await readExplanation(w.data, first)).status, "idle");
+ await assert.rejects(access(w.record), { code: "ENOENT" });
+ await request("explain");
+ const state = await ready(w); assert.equal(state.status, "ready", state.error);
+ assert.equal((await records(w)).filter(row => row.method === "thread/fork").length, 1);
+ assert.deepEqual(await readFile(w.transcript), original);
  await stopWorker(w);
 });

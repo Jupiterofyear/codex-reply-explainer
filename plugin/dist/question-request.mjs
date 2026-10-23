@@ -83,7 +83,7 @@ function questionFiles(dataRoot2, selection) {
 async function submitQuestion(dataRoot2, openId2, action2, text2 = "") {
   const selection = await activeSelection(dataRoot2);
   if (selection?.openId !== openId2) throw new Error("\u5DF2\u5207\u6362\u6216\u5173\u95ED\u804A\u5929\uFF0C\u8BF7\u91CD\u65B0\u63D0\u95EE\u3002");
-  if (!["ask", "reset"].includes(action2)) throw new Error("\u63D0\u95EE\u64CD\u4F5C\u65E0\u6548\u3002");
+  if (!["ask", "reset", "stop"].includes(action2)) throw new Error("\u63D0\u95EE\u64CD\u4F5C\u65E0\u6548\u3002");
   if (action2 === "ask" && (!text2.trim() || text2.length > 32e3)) throw new Error("\u8BF7\u8F93\u5165 1 \u81F3 32000 \u5B57\u7684\u95EE\u9898\u3002");
   const files = questionFiles(dataRoot2, selection);
   const previous = await readJson(files.control);
@@ -92,9 +92,15 @@ async function submitQuestion(dataRoot2, openId2, action2, text2 = "") {
   if (action2 === "ask" && previous?.requestId && result?.requestId !== previous.requestId) throw new Error("\u8BF7\u7B49\u5F85\u4E0A\u4E00\u6761\u56DE\u7B54\u5B8C\u6210\u3002");
   if (action2 === "ask" && ["queued", "generating"].includes(result?.status)) throw new Error("\u8BF7\u7B49\u5F85\u4E0A\u4E00\u6761\u56DE\u7B54\u5B8C\u6210\u3002");
   if (action2 === "ask" && result?.status === "error") throw new Error("\u8BF7\u70B9\u201C\u91CD\u65B0\u5F00\u59CB\u201D\u540E\u7EE7\u7EED\u63D0\u95EE\u3002");
+  if (action2 === "stop") {
+    if (!previous?.requestId || result?.requestId === previous.requestId && ["ready", "error", "stopped"].includes(result.status)) return;
+    await writeJson(files.control, { ...previous, stopRequested: true });
+    return;
+  }
   await writeJson(files.control, {
     revision: action2 === "reset" || !previous ? randomUUID() : previous.revision,
     requestId: action2 === "ask" ? randomUUID() : null,
+    submittedAt: action2 === "ask" ? (/* @__PURE__ */ new Date()).toISOString() : null,
     text: action2 === "ask" ? text2.trim() : ""
   });
   if (!await isCurrentSelection(dataRoot2, selection)) {

@@ -112,25 +112,34 @@ async function discardSelection(dataRoot2, selection) {
     if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path2.join(directory, file), { force: true });
   }
 }
+async function retainedSelections(dataRoot2) {
+  return (await readJson(path2.join(dataRoot2, "floating", "chats.json")))?.selections || [];
+}
+async function isRetainedSelection(dataRoot2, selection) {
+  return await isWindowOpen(dataRoot2) && (await retainedSelections(dataRoot2)).some((item) => item.openId === selection.openId);
+}
 async function selectChat(dataRoot2, threadId2, title) {
   threadDirectory(dataRoot2, threadId2);
-  const file = path2.join(dataRoot2, "floating", "selection.json");
-  const previous = await readJson(file);
-  if (previous?.threadId === threadId2 && await isWindowOpen(dataRoot2)) return previous;
-  const selection = { threadId: threadId2, title, openId: randomUUID(), initialStatus: "idle" };
-  await writeJson(file, selection);
-  await discardSelection(dataRoot2, previous);
+  const directory = path2.join(dataRoot2, "floating");
+  const selections = await isWindowOpen(dataRoot2) ? await retainedSelections(dataRoot2) : [];
+  let selection = selections.find((item) => item.threadId === threadId2);
+  if (!selection) {
+    selection = { threadId: threadId2, title, openId: randomUUID(), initialStatus: "idle" };
+    selections.push(selection);
+  } else selection.title = title;
+  await writeJson(path2.join(directory, "chats.json"), { selections });
+  await writeJson(path2.join(directory, "selection.json"), selection);
   return selection;
 }
 async function readExplanation(dataRoot2, threadId2) {
   threadDirectory(dataRoot2, threadId2);
-  const selection = await readJson(path2.join(dataRoot2, "floating", "selection.json"));
-  if (selection?.threadId !== threadId2) return { threadId: threadId2, status: "idle" };
+  const selection = (await retainedSelections(dataRoot2)).find((item) => item.threadId === threadId2);
+  if (!selection) return { threadId: threadId2, status: "idle" };
   const latest = await readJson(explanationFiles(dataRoot2, selection).latest);
   if (!latest) return { threadId: threadId2, status: selection.initialStatus || "idle" };
   const state = await readJson(explanationFiles(dataRoot2, selection, latest.turnId).result) || { threadId: threadId2, status: "idle" };
   if (state.workerPid && ["queued", "generating"].includes(state.status) && !isProcessRunning(state.workerPid)) {
-    return { ...state, status: "error", error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u9000\u51FA\u3002\u70B9\u51FB\u201C\u89E3\u91CA\u5F53\u524D\u804A\u5929\u201D\u53EF\u91CD\u65B0\u751F\u6210\u3002" };
+    return { ...state, status: "error", error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u9000\u51FA\u3002\u70B9\u51FB\u201C\u89E3\u91CA\u5F53\u524D\u5BF9\u8BDD\u201D\u53EF\u91CD\u65B0\u751F\u6210\u3002" };
   }
   return state;
 }
@@ -215,11 +224,11 @@ async function enqueueStop(event, { dataRoot: dataRoot2 }) {
 }
 
 // src/floating.mjs
-import { DatabaseSync } from "node:sqlite";
 import path4 from "node:path";
-function readThreadName(sourceHome2, threadId2) {
+async function readThreadName(sourceHome2, threadId2) {
+  const { DatabaseSync: DatabaseSync2 } = await import("node:sqlite");
   threadDirectory(sourceHome2, threadId2);
-  const database = new DatabaseSync(path4.join(sourceHome2, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync2(path4.join(sourceHome2, "state_5.sqlite"), { readOnly: true });
   try {
     const thread = database.prepare("SELECT name, title FROM threads WHERE id = ?").get(threadId2);
     if (!thread) throw new Error("\u6CA1\u6709\u627E\u5230\u8FD9\u6BB5\u804A\u5929\u7684\u540D\u79F0\u3002");
@@ -230,7 +239,7 @@ function readThreadName(sourceHome2, threadId2) {
 }
 
 // src/latest.mjs
-import { DatabaseSync as DatabaseSync2 } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import path7 from "node:path";
 
 // src/history.mjs
@@ -300,7 +309,7 @@ async function readRolloutHistory(sourceHome2, source) {
 // src/latest.mjs
 async function latestReplyEvent(sourceHome2, threadId2) {
   threadDirectory(sourceHome2, threadId2);
-  const database = new DatabaseSync2(path7.join(sourceHome2, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync(path7.join(sourceHome2, "state_5.sqlite"), { readOnly: true });
   let transcript;
   try {
     const thread = database.prepare("SELECT rollout_path FROM threads WHERE id = ?").get(threadId2);
@@ -333,19 +342,19 @@ async function latestReplyEvent(sourceHome2, threadId2) {
 }
 
 // src/request.mjs
-var [dataRoot, sourceHome, threadId] = process.argv.slice(2);
+var [dataRoot, sourceHome, threadId, action = "explain"] = process.argv.slice(2);
 if (await isWindowOpen(dataRoot)) {
-  await ensureWorker({ root: path8.resolve(path8.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
-  const title = readThreadName(sourceHome, threadId);
+  if (action !== "follow") await ensureWorker({ root: path8.resolve(path8.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
+  const title = await readThreadName(sourceHome, threadId);
   const selection = await selectChat(dataRoot, threadId, title);
   try {
-    if (selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
+    if (action === "explain" && selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
       const event = await latestReplyEvent(sourceHome, threadId);
       if (event) await enqueueStop(event, { dataRoot });
       else if (await isCurrentSelection(dataRoot, selection)) await writeJson(path8.join(dataRoot, "floating", "selection.json"), { ...selection, initialStatus: "unavailable" });
     }
   } finally {
-    if (selection && !await isCurrentSelection(dataRoot, selection)) {
+    if (selection && !await isRetainedSelection(dataRoot, selection)) {
       await discardSelection(dataRoot, selection);
       const file = path8.join(dataRoot, "floating", "selection.json");
       if ((await readJson(file))?.openId === selection.openId) await rm3(file, { force: true });

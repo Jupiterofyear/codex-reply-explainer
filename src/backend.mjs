@@ -1,6 +1,7 @@
 import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
+import { questionPrompt } from "./context.mjs";
 
 export class AppServerBackend {
   constructor({ cliPath, home, directory, cwd }) {
@@ -59,12 +60,21 @@ export class AppServerBackend {
     const active = this.active;
     if (!active || params?.threadId !== active.threadId) return;
     if (active.turnId && (params.turnId || params.turn?.id) && (params.turnId || params.turn?.id) !== active.turnId) return;
+    const phase = value => {
+      if (active.phase !== value) { active.phase = value; active.onPhase?.(value); }
+    };
+    const updateText = (id, text, delta) => {
+      active.items.set(id, delta ? (active.items.get(id) || "") + text : text);
+      active.text = [...active.items.values()].filter(Boolean).join("\n\n");
+      active.onText?.(active.text);
+    };
+    if ((method === "item/started" && params.item.type === "reasoning") || method.startsWith("item/reasoning/")) phase("thinking");
     if (method === "item/agentMessage/delta") {
       active.firstTextAt ??= Date.now();
-      active.text += params.delta;
-      active.onText?.(active.text);
+      phase("answering");
+      updateText(params.itemId, params.delta, true);
     }
-    if (method === "item/completed" && params.item.type === "agentMessage") active.text = params.item.text;
+    if (method === "item/completed" && params.item.type === "agentMessage") updateText(params.item.id, params.item.text, false);
     if (method === "thread/tokenUsage/updated") { active.lastTokenUsage = params.tokenUsage.last; active.usageTurnId = params.turnId; }
     if (method === "item/started" && ["commandExecution", "fileChange", "mcpToolCall", "webSearch"].includes(params.item.type)) active.toolCalls++;
     if (method === "turn/completed") {
@@ -85,7 +95,7 @@ export class AppServerBackend {
     }
     const fork = await this.request("thread/fork", { threadId, path, ephemeral: true, excludeTurns: true,
       model: context.model, modelProvider: metadata.model_provider, cwd: context.cwd,
-      ...questions ? { sandbox: "read-only", approvalPolicy: "untrusted", approvalsReviewer: "user" } : {}, config });
+      ...questions ? { developerInstructions: questionPrompt, sandbox: "read-only", approvalPolicy: "untrusted", approvalsReviewer: "user" } : {}, config });
     return { id: fork.thread.id, context, fork: { forkedFromId: fork.thread.forkedFromId, path: fork.thread.path,
       model: fork.model, modelProvider: fork.modelProvider, reasoningEffort: fork.reasoningEffort } };
   }
@@ -101,14 +111,14 @@ export class AppServerBackend {
       return { ...result, fork: branch.fork, timings: { ...result.timings, forkMs, totalMs: Date.now() - startedAt } };
     } finally { await this.discard(branch); }
   }
-  async answer({ branch, prompt, signal, onText }) {
+  async answer({ branch, prompt, signal, onText, onPhase }) {
     if (this.active) throw new Error("后台正在处理另一条回复。");
     signal?.throwIfAborted();
     const startedAt = Date.now();
     const branchId = branch.id, context = branch.context;
     let resolve, reject;
     const completed = new Promise((yes, no) => { resolve = yes; reject = no; });
-    const active = { threadId: branchId, text: "", resolve, reject, toolCalls: 0, onText };
+    const active = { threadId: branchId, text: "", resolve, reject, toolCalls: 0, onText, onPhase, items: new Map() };
     this.active = active;
     const timeout = setTimeout(() => reject(new Error("解释生成超时。")), 240000);
     let turnId, interrupt;
@@ -129,7 +139,7 @@ export class AppServerBackend {
       if (!active.text.trim()) throw new Error("没有收到解释内容。");
       if (!active.lastTokenUsage || active.usageTurnId !== turnId) throw new Error("后台没有返回本次请求的缓存计数。");
       const last = active.lastTokenUsage;
-      return { text: active.text.trim(), usage: [{ input_token_count: last.inputTokens, cached_token_count: last.cachedInputTokens, output_token_count: last.outputTokens }], branchId, toolCalls: active.toolCalls,
+      return { text: active.text, usage: [{ input_token_count: last.inputTokens, cached_token_count: last.cachedInputTokens, output_token_count: last.outputTokens }], branchId, toolCalls: active.toolCalls,
         lastTokenUsage: active.lastTokenUsage, timings: { totalMs: Date.now() - startedAt, turnStartMs: active.turnStartedAt - startedAt, firstTextMs: active.firstTextAt ? active.firstTextAt - startedAt : null } };
     } finally {
       clearTimeout(timeout); signal?.removeEventListener("abort", abort);

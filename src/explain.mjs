@@ -3,7 +3,7 @@ import { readRolloutHistory } from "./history.mjs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
-import { threadDirectory, writeJson, readJson, activeSelection, isCurrentSelection, explanationFiles, discardSelection, readExplanation } from "./state.mjs";
+import { threadDirectory, writeJson, readJson, activeSelection, isRetainedSelection, explanationFiles, discardSelection, readExplanation } from "./state.mjs";
 import { explanationPrompt, snapshotThroughTurn, relativeRolloutPath } from "./context.mjs";
 export { explanationPrompt, snapshotThroughTurn, relativeRolloutPath, requestUsage } from "./context.mjs";
 
@@ -15,11 +15,11 @@ export async function copyRuntimeInputs(sourceHome, home) {
   await copyFile(path.join(sourceHome, "auth.json"), path.join(home, "auth.json"));
 }
 
-export async function explainStop(event, { dataRoot, sourceHome, backend }) {
+export async function explainStop(event, { dataRoot, sourceHome, backend, selection: requestedSelection }) {
   threadDirectory(dataRoot, event.session_id);
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(event.turn_id)) throw new Error("回复标识无效。");
   if (!event.last_assistant_message?.trim() || !event.transcript_path) return;
-  const selection = await activeSelection(dataRoot);
+  const selection = requestedSelection || await activeSelection(dataRoot);
   if (selection?.threadId !== event.session_id) return;
   const previous = await readExplanation(dataRoot, event.session_id);
   if (previous.turnId === event.turn_id && previous.status !== "queued") return;
@@ -43,7 +43,7 @@ export async function explainStop(event, { dataRoot, sourceHome, backend }) {
       while (!finished) {
         await delay(250);
         if (finished) return;
-        if (!await isCurrentSelection(dataRoot, selection) || (await readJson(files.latest))?.turnId !== event.turn_id) {
+        if (!await isRetainedSelection(dataRoot, selection) || (await readJson(files.latest))?.turnId !== event.turn_id) {
           cancel.abort(new Error("已切换或关闭解释。")); return;
         }
         if (partial !== displayed) {
@@ -66,7 +66,7 @@ export async function explainStop(event, { dataRoot, sourceHome, backend }) {
     if (saved) await rm(saved, { force: true });
     await rm(run, { recursive: true, force: true });
     await rm(path.join(backend.home, "auth.json"), { force: true });
-    const current = await isCurrentSelection(dataRoot, selection);
+    const current = await isRetainedSelection(dataRoot, selection);
     const latest = current ? await readJson(files.latest) : null;
     if (!current) await discardSelection(dataRoot, selection);
     else if (latest?.turnId !== event.turn_id) await rm(files.result, { force: true });

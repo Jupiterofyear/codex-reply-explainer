@@ -40,5 +40,5 @@ document.querySelector("#reopen").onclick = async event => {
   try { await refresh("reply_explainer.open_floating"); }
   finally { button.disabled = false; }
 };
-await refresh("reply_explainer.explain_latest");
+await refresh();
 setInterval(() => refresh(), 2000);

@@ -19580,30 +19580,119 @@ parser.renderer.rules.image = (tokens, index) => parser.utils.escapeHtml(tokens[
 function renderMarkdown(text3) {
   return parser.render(text3);
 }
-function renderMessages(messages, partial = "") {
-  const visible = partial ? [...messages, { role: "assistant", text: partial }] : messages;
-  return visible.map((message) => ({ role: message.role, html: renderMarkdown(message.text) }));
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1e3));
+  return seconds < 60 ? seconds + " \u79D2" : Math.floor(seconds / 60) + " \u5206 " + seconds % 60 + " \u79D2";
+}
+function renderAnswer(text3, thinking = []) {
+  let html = "", offset = 0;
+  for (const stage of thinking) {
+    html += renderMarkdown(text3.slice(offset, stage.offset));
+    const live = stage.elapsedMs === void 0;
+    html += '<div class="thinking-row' + (live ? " live" : "") + '"><span class="thinking-label">' + (live ? "\u6B63\u5728\u601D\u8003" : "\u5DF2\u601D\u8003") + '</span><span class="thinking-time"' + (live ? ' data-started-at="' + parser.utils.escapeHtml(stage.startedAt) + '"' : "") + "> \xB7 " + formatDuration(live ? Date.now() - Date.parse(stage.startedAt) : stage.elapsedMs) + "</span></div>";
+    offset = stage.offset;
+  }
+  return html + renderMarkdown(text3.slice(offset));
+}
+function renderMessages(messages, partial = "", thinking = []) {
+  const visible = partial || thinking.length ? [...messages, { role: "assistant", text: partial, thinking }] : messages;
+  return visible.map((message) => ({ role: message.role, html: (message.role === "assistant" ? renderAnswer(message.text, message.thinking) : renderMarkdown(message.text)) + (message.role === "assistant" && Number.isFinite(message.elapsedMs) ? '<div class="reply-duration">' + (message.stopped ? "\u5DF2\u505C\u6B62 \xB7 \u7528\u65F6 " : "\u7528\u65F6 ") + formatDuration(message.elapsedMs) + "</div>" : "") }));
 }
 
 // src/floating-document.mjs
 var page;
+var activity;
+var activityElement = document.querySelector("#question-activity");
+var activityLabel = activityElement.querySelector(".activity-label");
+var activityTime = activityElement.querySelector(".activity-time");
+function updateActivityTime() {
+  if (activity) activityTime.textContent = "\xB7 " + formatDuration(Date.now() - Date.parse(activity.startedAt));
+  for (const timer of document.querySelectorAll(".thinking-time[data-started-at]")) timer.textContent = " \xB7 " + formatDuration(Date.now() - Date.parse(timer.dataset.startedAt));
+}
+setInterval(updateActivityTime, 1e3);
 var positions = /* @__PURE__ */ new Map();
+var userCount = 0;
+var following = true;
+var scrolling = false;
+var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+var atBottom = () => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 48;
+function scrollToBottom(smooth) {
+  const top = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  scrolling = smooth && !reducedMotion.matches && Math.abs(top - window.scrollY) > 1;
+  window.scrollTo({ top, behavior: scrolling ? "smooth" : "instant" });
+}
+window.addEventListener("scroll", () => {
+  if (!scrolling) following = atBottom();
+}, { passive: true });
+window.addEventListener("scrollend", () => {
+  scrolling = false;
+  following = atBottom();
+});
+var stopFollowing = () => {
+  scrolling = false;
+  following = false;
+  window.scrollTo({ top: window.scrollY, behavior: "instant" });
+};
+window.addEventListener("wheel", stopFollowing, { passive: true });
+window.addEventListener("touchstart", stopFollowing, { passive: true });
+window.addEventListener("pointerdown", () => {
+  if (scrolling) stopFollowing();
+});
+window.addEventListener("keydown", (event) => {
+  if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(event.key)) stopFollowing();
+});
+window.addEventListener("resize", () => {
+  if (page?.startsWith("questions-") && following) scrollToBottom(false);
+});
 window.chrome.webview.addEventListener("message", (event) => {
+  if (event.data.fontSizes) {
+    document.documentElement.style.fontSize = event.data.fontSizes.sans + "px";
+    document.documentElement.style.setProperty("--code-font-size", event.data.fontSizes.code + "px");
+    if (page?.startsWith("questions-") && following) scrollToBottom(false);
+    return;
+  }
+  activity = event.data.activity;
+  activityElement.hidden = !activity || !!event.data.thinking?.length;
+  if (activity) {
+    if (activityLabel.textContent !== activity.label) activityLabel.textContent = activity.label;
+    updateActivityTime();
+  }
   const changed = page !== event.data.page;
-  if (changed) positions.set(page, window.scrollY);
+  if (changed) positions.set(page, { top: window.scrollY, following });
   const host = document.querySelector("#explanation");
   if (event.data.messages) {
-    host.replaceChildren(...renderMessages(event.data.messages, event.data.partial).map((message) => {
-      const section = document.createElement("section");
-      const heading2 = document.createElement("h3");
-      heading2.textContent = message.role === "user" ? "\u4F60" : "\u56DE\u7B54";
-      const body = document.createElement("div");
-      body.innerHTML = message.html;
-      section.append(heading2, body);
-      return section;
-    }));
+    const count = event.data.messages.filter((message) => message.role === "user").length;
+    const sent = !changed && count > userCount;
+    if (changed) {
+      host.replaceChildren();
+      following = positions.get(event.data.page)?.following ?? true;
+    }
+    const messages = renderMessages(event.data.messages, event.data.partial, event.data.thinking);
+    messages.forEach((message, index) => {
+      let section = host.children[index];
+      if (!section) {
+        section = document.createElement("section");
+        section.className = "message " + (message.role === "user" ? "user" : "assistant");
+        section.setAttribute("aria-label", message.role === "user" ? "\u4F60" : "\u56DE\u7B54");
+        section.append(document.createElement("div"));
+        host.append(section);
+        if (!changed && !reducedMotion.matches) section.animate(
+          [{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "translateY(0)" }],
+          { duration: 150, easing: "cubic-bezier(.4,0,.2,1)" }
+        );
+      }
+      if (section.dataset.html !== message.html) {
+        section.firstElementChild.innerHTML = message.html;
+        section.dataset.html = message.html;
+      }
+    });
+    while (host.children.length > messages.length) host.lastElementChild.remove();
+    userCount = count;
+    if (sent) following = true;
+    if (changed && !following) window.scrollTo({ top: positions.get(event.data.page).top, behavior: "instant" });
+    else if (following) scrollToBottom(sent || scrolling);
   } else host.innerHTML = renderMarkdown(event.data.text);
-  if (changed) window.scrollTo(0, positions.get(event.data.page) || 0);
+  if (changed && !event.data.messages) window.scrollTo(0, positions.get(event.data.page)?.top || 0);
   page = event.data.page;
 });
 /*! Bundled license information:

@@ -8,11 +8,11 @@ Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windo
 
 ### Development branch: explanations and questions (unreleased)
 
-The floating window now has **解释 (Explain)** and **提问 (Ask)** tabs. Explanations continue updating automatically. Ask sends a question with the button or Ctrl+Enter. Switching tabs preserves the text, question draft, and scroll position.
+The floating window now has **解释 (Explain)** and **提问 (Ask)** tabs. The window reads the selected sidebar conversation through Windows accessibility about once per second, without requiring a main-chat message or generating content. Click the bottom **解释当前对话 (Explain current conversation)** button to generate an explanation. Changing chats in the main window selects the corresponding floating-window chat tab. Manually selecting an older tab keeps it visible until the next main-window chat change; explanations and questions target that selected tab. A horizontally scrollable row below Explain/Ask retains each chat’s content, draft and reading position. Ask sends with Enter; Shift+Enter inserts a new line. Switching tabs preserves the text, question draft, and scroll position.
 
-The first question forks the selected chat's latest complete saved context using its model and reasoning effort. Follow-up questions reuse that ephemeral branch; new main-chat replies do not replace it. **重新开始 (Start over)** discards the branch and reads the latest complete main-chat context on the next question. Rebinding the same chat preserves questions; switching chats or closing the window discards them. Restarting a crashed backend discards old questions without replaying them.
+The first question forks the selected chat's latest complete saved context using its model and reasoning effort. Follow-up questions reuse that ephemeral branch while the main chat is unchanged. After a new main-chat reply completes, the next question creates a fresh fork and imports the visible side-window Q&A once as quoted historical material, labeled with its source main turn. Past discussion does not establish current progress; the latest main-chat evidence controls facts and progress. Fixed developer instructions require concise, informative answers without defensive boilerplate. **重新开始 (Start over)** clears the Q&A and discards the branch; the next question reads only the latest complete main-chat context. Rebinding or returning to a chat tab preserves its questions and branch; switching tabs lets existing generation finish. Closing the window clears all tabs and temporary branches. Restarting a crashed backend discards old questions without replaying them.
 
-Explanations and questions run one at a time. Start over cancels an active question. Question forks disable connector/MCP plugins, use a read-only sandbox, and reject interactive execution requests; the prompt asks the model to answer from existing context without tools. These tool settings can change the cached input prefix, so the historical explanation measurements below do not establish question performance. See [VALIDATION.md](VALIDATION.md) for local checks.
+Explanations and questions have separate backends and ephemeral branches, so they can generate concurrently. During generation, Send becomes Stop; stopping preserves received text and allows follow-up. Thinking indicators follow backend events: before the first output and below a paragraph when reasoning resumes. Each active stage has a moving highlight and a live clock; completed stages keep their thinking duration, and completed or stopped answers retain total duration. Switching chats preserves the timer. Reduced-motion settings disable the highlight animation. Start over cancels only the active question. The composer and body follow Codex’s UI font size, and code follows its code font size; changes are picked up while the window is open. Question forks disable connector/MCP plugins, use a read-only sandbox, and reject interactive execution requests; the prompt asks the model to answer from existing context without tools. These tool settings can change the cached input prefix, so the historical explanation measurements below do not establish question performance. See [VALIDATION.md](VALIDATION.md) for local checks.
 
 ## Interface preview
 
@@ -28,7 +28,7 @@ Click the image to view the full-size version, or read the [complete example rep
 
 - Select a chat. The plugin reads its locally saved history through the latest completed reply.
 - It creates a temporary fork from that history, keeping the original model and reasoning effort and reusing cached input where possible. If the conversation has been compacted, it inherits the context that remains after compaction.
-- The plugin automatically starts and reuses its explanation backend. Later completed replies in the selected chat automatically update the explanation.
+- The backend starts and is reused automatically. Explanations are generated only after clicking the bottom button.
 - Explanations appear only in the floating window. Switching chats or closing the window clears the previous explanation. Temporary copies of context and authentication data are removed after generation; closing the window removes the explanation backend's directory.
 - Supports Markdown and common mathematical notation.
 - **Remembers the window size and screen position when closed, and restores them the next time it opens.**
@@ -74,7 +74,7 @@ On October 22, 2026, the version containing these fixes automatically started an
 
 1. Windows 10/11 x64, with the Codex desktop app installed and signed in.
 2. Node.js **22.13 or later**, with `node.exe` available on `PATH`.
-3. Codex's `codex.exe` available on `PATH`, or its full path supplied to the installer. Use a version supporting `plugin marketplace`, `thread/fork`, and Stop hooks.
+3. Codex's `codex.exe` available on `PATH`, or its full path supplied to the installer. Use a version supporting `plugin marketplace` and `thread/fork`.
 4. Git is on PATH and GitHub is reachable.
 5. Microsoft WebView2 Runtime already installed. The package includes the required WebView2 SDK components, but not the browser runtime.
 
@@ -84,7 +84,7 @@ On October 22, 2026, the version containing these fixes automatically started an
 
 Send the project URL and this request to your own Codex:
 
-> Please install or update Codex Reply Explainer and enable automatic updates. Read README, PRIVACY.md, and install.ps1 first. Check the Windows, Node.js, Git, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP, extract it to a permanent folder I choose, and run the installer. For an existing installation, retain its Codex storage directory, explanation data directory, and window size and position. Inspect the Stop script and guide me through trusting it. Restart Codex, then verify the installed version, opening menu, and automatic explanations after new replies. Do not modify the desktop app's source code.
+> Please install or update Codex Reply Explainer and enable automatic updates. Read README, PRIVACY.md, and install.ps1 first. Check the Windows, Node.js, Git, Codex, and WebView2 requirements. Download the latest Windows x64 plugin ZIP, extract it to a permanent folder I choose, and run the installer. For an existing installation, retain its Codex storage directory, explanation data directory, and window size and position. This version requires no lifecycle hook approval. Restart Codex, then verify the installed version, opening menu, and automatic chat selection plus explanations after clicking the button. Do not modify the desktop app's source code.
 
 The installer registers this project's GitHub main branch as the plugin source. Codex downloads and updates the runtime files. Installation gets the version currently published on that branch. Machine-specific settings are stored separately, and window geometry stays in the existing explanation data directory.
 
@@ -100,8 +100,8 @@ The installer registers this project's GitHub main branch as the plugin source. 
    `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DataDirectory "D:\ReplyExplainerData"`
 
    For an existing public release, omitting `-DataDirectory` preserves the original data directory. Use `-CodexHome` for the Codex storage directory of the previous installation, and `-CodexPath` if Codex is not on PATH. Node.js and Git must be on PATH.
-3. In the CLI using the same Codex storage directory, enter `/hooks`, inspect and trust this plugin's **Stop** script, then restart the Codex desktop app.
-4. Open the floating window and check window geometry and automatic explanations after new replies.
+3. Reopen the Codex desktop app. This version registers no lifecycle hooks and requires no hook approval.
+4. Open the floating window and check window geometry and automatic chat selection plus explanations after clicking the button.
 
 Installation writes to:
 
@@ -112,21 +112,21 @@ Installation writes to:
 | Selected explanation data directory | Temporary explanations, diagnostic logs, and window geometry |
 | `.local` inside the extracted folder | Launcher information, installation receipt, and temporary installation files |
 
-A first installation defaults to `.local/data` inside the extracted folder. Existing installations retain their data directory. If it lives inside an older extracted folder, keep that directory. The installer does not modify desktop source code or automatically trust the Stop script.
+A first installation defaults to `.local/data` inside the extracted folder. Existing installations retain their data directory. If it lives inside an older extracted folder, keep that directory. The installer does not modify desktop source code.
 
 ## Open and use
 
 The plugin's interface currently uses Chinese labels. Their English meanings are included below.
 
 1. Open the local chat you want to explain. In the **top-right corner of the chat area, select “+” → “更多工具” (More tools) → “Codex 回复解释” (Codex Reply Explainer)** to open the floating window.
-2. The window selects that chat and generates an explanation of its latest completed reply. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open. If you retain the panel, its “打开悬浮窗” (Open floating window) button reopens the window directly.
-3. Keep the window open. Later completed replies in the same chat update its explanation automatically.
-4. **After switching chats, click “解释当前聊天” (Explain current chat) once at the top of the floating window.** This selects the chat you are currently viewing without reopening the menu. The button temporarily uses the “copy in-app link” shortcut and then restores the clipboard. Keep only one Codex main window open when using this button.
-5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前聊天” (Explain current chat) to restart the backend and generate the explanation again.
+2. The window selects that chat and waits for the bottom explanation button to be clicked. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open. If you retain the panel, its “打开悬浮窗” (Open floating window) button reopens the window directly.
+3. Sending a main-chat message selects that chat without generating an explanation. Click the bottom button when you want to explain its latest completed reply.
+4. **Selecting another sidebar chat updates the floating window automatically.** Keep one main window open with its selected sidebar conversation visible. The name must uniquely match a local saved conversation; duplicate names produce an explicit error. The current selection is checked again before explaining or sending. Recognition uses no focus changes, keystrokes, or clipboard access. Draft text survives conversation switches.
+5. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, and stops the explanation backend. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前对话” (Explain current conversation) to restart the backend and generate the explanation again.
 
-Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前聊天” (Explain current chat). The launcher locates the currently installed version and uses the existing data directory.
+Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前对话” (Explain current conversation). The launcher locates the currently installed version and uses the existing data directory.
 
-If explanations do not update after replies, check that the Stop script is trusted, the window is open, and it is bound to the same chat. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
+If the name does not follow navigation, check that the selected sidebar chat is visible and has a unique name; the window shows the specific error. Explanations require clicking the bottom button. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
 
 ## Automatic updates and uninstalling
 
@@ -135,7 +135,7 @@ Starting with **0.5.0-beta.3**, the installer enables Codex's official Git marke
 - **New users:** install once.
 - **beta.1 / beta.2 users:** close the floating window, run the new installer once, and restart Codex. The installer preserves the existing explanation data directory and window geometry.
 - **After that:** when the Codex backend starts, it checks the GitHub main branch, downloads changed plugin files, and refreshes the installed copy. Reopening Codex triggers a check; GitHub must be reachable. Close and reopen an existing floating window to load the new version.
-- Existing Stop-script trust remains valid when its definition is unchanged. If the definition changes, inspect and trust it again in `/hooks`.
+- This development version reads the selected sidebar conversation and registers no lifecycle hooks.
 
 Updates follow `.agents/plugins/marketplace.json` and `plugin/` on main. **Uploading Release assets alone does not trigger an automatic update.** Publishers must also commit the built, tested installation files to main. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release workflow.
 
@@ -167,7 +167,7 @@ Building requires the Windows x64 .NET Framework C# compiler. Required WebView2 
 
 This version depends on local record formats, database structure, and Codex's fork interface. Desktop updates may require adjustments. It preserves effective conversation history, while its separate explanation backend does not reproduce every part of the desktop backend's running state. Cache hits are measured using the server's returned counts.
 
-Plugins containing lifecycle hooks are currently ineligible for the official public plugin directory. This beta is distributed as source code and a manually installed package. See the [official plugin documentation](https://developers.openai.com/plugins/build/plugins) and [hook documentation](https://learn.chatgpt.com/docs/hooks).
+This beta is distributed as source code and a manually installed package. The development version no longer includes lifecycle hooks. See the [official plugin documentation](https://developers.openai.com/plugins/build/plugins).
 
 ## Privacy and licenses
 

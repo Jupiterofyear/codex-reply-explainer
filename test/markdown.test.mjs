@@ -44,3 +44,15 @@ test('Markdown link definitions and unsafe HTML cannot leak into the next messag
  assert.doesNotMatch(parts[1].html,/<a |https:\/\/example/);
  assert.match(parts[1].html,/<strong>独立回答<\/strong>/);
 });
+
+test('completed answers retain duration metadata without changing user or partial messages',()=>{
+ const messages=renderMessages([{role:'user',text:'问题',elapsedMs:999999},{role:'assistant',text:'完成',elapsedMs:125000}],'正在返回');
+ assert.doesNotMatch(messages[0].html,/reply-duration/);assert.match(messages[1].html,/用时 2 分 5 秒/);assert.doesNotMatch(messages[2].html,/reply-duration/);
+ assert.match(renderMessages([{role:'assistant',text:'短回答',elapsedMs:350}])[0].html,/用时 1 秒/);
+});
+
+test('thinking rows precede their output sections and stopped text stays visible',()=>{
+ const text='第一段。\n\n第二段。',thinking=[{offset:0,startedAt:'2026-10-23T00:00:00.000Z',elapsedMs:2500},{offset:4,startedAt:'2026-10-23T00:00:05.000Z'}];
+ const html=renderMessages([],text,thinking)[0].html;assert.ok(html.indexOf('已思考')<html.indexOf('第一段'));assert.ok(html.indexOf('第一段')<html.indexOf('正在思考'));assert.ok(html.indexOf('正在思考')<html.indexOf('第二段'));assert.match(html,/data-started-at=/);
+ const stopped=renderMessages([{role:'assistant',text:'已生成的内容',stopped:true,thinking:[{...thinking[0],offset:0}],elapsedMs:5000}])[0].html;assert.match(stopped,/已生成的内容/);assert.match(stopped,/已停止 · 用时 5 秒/);assert.doesNotMatch(stopped,/class="thinking-row live"/);
+});

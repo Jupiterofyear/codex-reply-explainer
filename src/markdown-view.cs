@@ -13,6 +13,7 @@ class MarkdownView : WebView2 {
     string profileDirectory, currentContent = "{\"text\":\"\",\"page\":\"explanation\"}";
     Task initialization;
     bool ready;
+    string fontSettings = "{\"fontSizes\":{\"sans\":14,\"code\":12}}";
 
     public Task InitializeAsync(string dataRoot) {
         return initialization = InitializeCoreAsync(dataRoot);
@@ -35,7 +36,7 @@ class MarkdownView : WebView2 {
         CoreWebView2.NewWindowRequested += (sender, args) => { args.Handled = true; if (args.IsUserInitiated) OpenLink(args.Uri); };
         CoreWebView2.NavigationCompleted += (sender, args) => {
             if (!args.IsSuccess) throw new InvalidOperationException("正文页面未能加载：" + args.WebErrorStatus);
-            ready = true; SendText();
+            ready = true; CoreWebView2.PostWebMessageAsJson(fontSettings); SendText();
         };
         CoreWebView2.Navigate(Page);
     }
@@ -44,11 +45,15 @@ class MarkdownView : WebView2 {
         if (Uri.TryCreate(value, UriKind.Absolute, out uri) && (uri.Scheme == "https" || uri.Scheme == "http"))
             Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
     }
+    public void SetFontSizes(double sans, double code) {
+        fontSettings = json.Serialize(new { fontSizes = new { sans = sans, code = code } });
+        if (ready) CoreWebView2.PostWebMessageAsJson(fontSettings);
+    }
     public void SetText(string value, string page = "explanation") {
         SetContent(new { text = value, page = page });
     }
-    public void SetMessages(object messages, string partial, string page) {
-        SetContent(new { messages = messages, partial = partial, page = page });
+    public void SetMessages(object messages, string partial, string page, object activity, object thinking) {
+        SetContent(new { messages = messages, partial = partial, page = page, activity = activity, thinking = thinking });
     }
     void SetContent(object content) {
         string value = json.Serialize(content);
