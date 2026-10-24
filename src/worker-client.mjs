@@ -5,6 +5,7 @@ import { rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { readJson, writeJson, activeSelection, explanationFiles, readExplanation, threadDirectory } from "./state.mjs";
+import { readPrompts, promptId } from "./prompts.mjs";
 export function workerFiles(dataRoot) {
   const directory = path.join(path.resolve(dataRoot), "backend");
   return { directory, state: path.join(directory, "state.json"), pending: path.join(directory, "request.json") };
@@ -40,14 +41,16 @@ export async function enqueueStop(event, { dataRoot }) {
   if (!event.last_assistant_message?.trim() || !event.transcript_path) return;
   const selection = await activeSelection(dataRoot);
   if (selection?.threadId !== event.session_id) return;
+  const prompt = (await readPrompts(dataRoot)).explanation;
+  const settingsId = promptId(prompt);
   const previous = await readExplanation(dataRoot, event.session_id);
-  if (previous.turnId === event.turn_id && previous.status !== "error") return;
+  if (previous.turnId === event.turn_id && previous.promptId === settingsId && previous.status !== "error") return;
   const files = explanationFiles(dataRoot, selection, event.turn_id);
   const worker = await liveWorker(dataRoot);
-  await writeJson(files.result, { threadId: event.session_id, turnId: event.turn_id, status: worker ? "queued" : "error", workerPid: worker?.pid,
+  await writeJson(files.result, { threadId: event.session_id, turnId: event.turn_id, promptId: settingsId, status: worker ? "queued" : "error", workerPid: worker?.pid,
     ...worker ? {} : { error: "解释后台已结束，请重新打开小窗。" }, startedAt: new Date().toISOString() });
   await writeJson(files.latest, { turnId: event.turn_id });
   if (previous.turnId && previous.turnId !== event.turn_id) await rm(explanationFiles(dataRoot, selection, previous.turnId).result, { force: true });
   if (!worker) return;
-  await writeJson(workerFiles(dataRoot).pending, { openId: selection.openId, event });
+  await writeJson(workerFiles(dataRoot).pending, { openId: selection.openId, event, prompt });
 }

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { latestReplyEvent } from "./latest.mjs";
 import { saveSnapshot, copyRuntimeInputs } from "./explain.mjs";
 import { questionWithHistory } from "./context.mjs";
+import { readPrompts, questionInstructions } from "./prompts.mjs";
 import { readJson, writeJson, threadDirectory, activeSelection, isCurrentSelection, isRetainedSelection } from "./state.mjs";
 
 export function questionFiles(dataRoot, selection) {
@@ -113,7 +114,8 @@ export class QuestionsSession {
       await checkStop(); cancel.signal.throwIfAborted();
       const event = await latestReplyEvent(this.sourceHome, selection.threadId);
       if (!event) throw new Error("暂时没有找到这段聊天已保存的完整回复。");
-      const newBranch = !this.branch || this.sourceTurnId !== event.turn_id;
+      const instructions = (await readPrompts(this.dataRoot)).question;
+      const newBranch = !this.branch || this.sourceTurnId !== event.turn_id || this.questionPrompt !== instructions;
       if (newBranch) {
         const snapshot = await saveSnapshot(event, this.sourceHome, this.backend);
         saved = snapshot.saved;
@@ -121,8 +123,9 @@ export class QuestionsSession {
         cancel.signal.throwIfAborted();
         if (this.branch) await this.backend.discard(this.branch);
         this.branch = null;
-        this.branch = await this.backend.fork({ threadId: snapshot.snapshotId, path: saved, context: snapshot.context, metadata: snapshot.metadata, questions: true });
+        this.branch = await this.backend.fork({ threadId: snapshot.snapshotId, path: saved, context: snapshot.context, metadata: snapshot.metadata, questions: true, developerInstructions: questionInstructions(instructions) });
         this.sourceTurnId = event.turn_id;
+        this.questionPrompt = instructions;
       }
       question.sourceTurnId = this.sourceTurnId;
       const prompt = newBranch ? questionWithHistory(control.text, history) : control.text;

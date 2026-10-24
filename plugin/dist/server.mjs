@@ -1869,8 +1869,8 @@ var require_keyword = __commonJS({
       var _a3;
       const { gen, keyword, schema, parentSchema, $data, it } = cxt;
       checkAsyncKeyword(it, def);
-      const validate2 = !$data && def.compile ? def.compile.call(it.self, schema, parentSchema, it) : def.validate;
-      const validateRef = useKeyword(gen, keyword, validate2);
+      const validate3 = !$data && def.compile ? def.compile.call(it.self, schema, parentSchema, it) : def.validate;
+      const validateRef = useKeyword(gen, keyword, validate3);
       const valid = gen.let("valid");
       cxt.block$data(valid, validateKeyword);
       cxt.ok((_a3 = def.valid) !== null && _a3 !== void 0 ? _a3 : valid);
@@ -2943,28 +2943,28 @@ var require_compile = __commonJS({
         if (this.opts.code.process)
           sourceCode = this.opts.code.process(sourceCode, sch);
         const makeValidate = new Function(`${names_1.default.self}`, `${names_1.default.scope}`, sourceCode);
-        const validate2 = makeValidate(this, this.scope.get());
-        this.scope.value(validateName, { ref: validate2 });
-        validate2.errors = null;
-        validate2.schema = sch.schema;
-        validate2.schemaEnv = sch;
+        const validate3 = makeValidate(this, this.scope.get());
+        this.scope.value(validateName, { ref: validate3 });
+        validate3.errors = null;
+        validate3.schema = sch.schema;
+        validate3.schemaEnv = sch;
         if (sch.$async)
-          validate2.$async = true;
+          validate3.$async = true;
         if (this.opts.code.source === true) {
-          validate2.source = { validateName, validateCode, scopeValues: gen._values };
+          validate3.source = { validateName, validateCode, scopeValues: gen._values };
         }
         if (this.opts.unevaluated) {
           const { props, items } = schemaCxt;
-          validate2.evaluated = {
+          validate3.evaluated = {
             props: props instanceof codegen_1.Name ? void 0 : props,
             items: items instanceof codegen_1.Name ? void 0 : items,
             dynamicProps: props instanceof codegen_1.Name,
             dynamicItems: items instanceof codegen_1.Name
           };
-          if (validate2.source)
-            validate2.source.evaluated = (0, codegen_1.stringify)(validate2.evaluated);
+          if (validate3.source)
+            validate3.source.evaluated = (0, codegen_1.stringify)(validate3.evaluated);
         }
-        sch.validate = validate2;
+        sch.validate = validate3;
         return sch;
       } catch (e) {
         delete sch.validate;
@@ -3261,8 +3261,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path9) {
-      let input = path9;
+    function removeDotSegments(path10) {
+      let input = path10;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3671,8 +3671,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path9 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path9 && path9 !== "/" ? path9 : void 0;
+        const path10 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path10 && path10 !== "/" ? path10 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -6887,8 +6887,8 @@ var require_formats = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
-    function fmtDef(validate2, compare) {
-      return { validate: validate2, compare };
+    function fmtDef(validate3, compare) {
+      return { validate: validate3, compare };
     }
     exports.fullFormats = {
       // date: http://tools.ietf.org/html/rfc3339#section-5.6
@@ -7219,7 +7219,7 @@ import { spawn } from "node:child_process";
 import { openSync, closeSync } from "node:fs";
 import { rm as rm2 } from "node:fs/promises";
 import { setTimeout as delay2 } from "node:timers/promises";
-import path3 from "node:path";
+import path5 from "node:path";
 
 // src/state.mjs
 import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
@@ -7334,10 +7334,59 @@ function isProcessRunning(pid) {
   }
 }
 
+// src/prompts.mjs
+import path4 from "node:path";
+import { createHash } from "node:crypto";
+
+// src/context.mjs
+import path3 from "node:path";
+var questionPrompt = "\u4F60\u5728\u72EC\u7ACB\u5C0F\u7A97\u4E2D\u56DE\u7B54\u7528\u6237\u7684\u95EE\u9898\u3002\u7B80\u6D01\u3001\u65E0\u9632\u5FA1\u6027\u3001\u6709\u4FE1\u606F\u91CF\uFF1A\u76F4\u63A5\u7ED9\u7ED3\u8BBA\u548C\u5FC5\u8981\u4F9D\u636E\uFF0C\u6BCF\u53E5\u8BDD\u63D0\u4F9B\u6709\u7528\u4FE1\u606F\uFF1B\u590D\u6742\u95EE\u9898\u4FDD\u7559\u5FC5\u8981\u63A8\u5BFC\u3002\u4F7F\u7528\u5E38\u7528\u3001\u5177\u4F53\u3001\u5B9A\u4E49\u6E05\u695A\u7684\u8BCD\uFF0C\u4E13\u4E1A\u8BCD\u968F\u5373\u89E3\u91CA\u3002\u4E0D\u5199\u5F00\u573A\u3001\u91CD\u590D\u603B\u7ED3\u3001\u9632\u5FA1\u6027\u5957\u8BDD\u3001\u514D\u8D23\u58F0\u660E\u3001\u81EA\u6211\u8FA9\u62A4\u6216\u9884\u9632\u6027\u6F84\u6E05\u3002\n\u6709\u4F9D\u636E\u7684\u731C\u6D4B\u5E94\u7B80\u8981\u6807\u660E\u4F9D\u636E\uFF0C\u4E0D\u5192\u5145\u4E8B\u5B9E\uFF1B\u7F3A\u5C11\u4FE1\u606F\u65F6\u6307\u51FA\u5177\u4F53\u7F3A\u5C11\u4EC0\u4E48\u3002\u53EA\u6839\u636E\u5DF2\u6709\u4E0A\u4E0B\u6587\u56DE\u7B54\uFF0C\u4E0D\u6267\u884C\u4EFB\u52A1\u3001\u4E0D\u8C03\u7528\u5DE5\u5177\u3001\u4E0D\u8BFB\u5199\u6587\u4EF6\u3001\u4E0D\u5411\u4E3B\u804A\u5929\u53D1\u9001\u6D88\u606F\u3002";
+var explanationPrompt = "\u8FD9\u662F\u4E00\u6761\u5E94\u7528\u81EA\u52A8\u53D1\u8D77\u7684\u89E3\u91CA\u8BF7\u6C42\u3002\u7ED3\u5408\u5DF2\u7EE7\u627F\u7684\u5BF9\u8BDD\uFF0C\u7406\u89E3\u7528\u6237\u5F53\u524D\u7684\u95EE\u9898\u3001\u5173\u6CE8\u70B9\u3001\u77E5\u8BC6\u6C34\u5E73\u548C\u660E\u786E\u504F\u597D\uFF0C\u53EA\u89E3\u91CA\u6700\u540E\u4E00\u6761\u5DF2\u5B8C\u6210\u56DE\u590D\u3002\n\u76F4\u63A5\u544A\u8BC9\u7528\u6237\u6700\u503C\u5F97\u77E5\u9053\u7684\u7ED3\u8BBA\u3001\u8FD9\u5BF9\u5176\u95EE\u9898\u610F\u5473\u7740\u4EC0\u4E48\uFF1B\u9700\u8981\u884C\u52A8\u65F6\u8BF4\u660E\u4E0B\u4E00\u6B65\u3002\u53EA\u4FDD\u7559\u7406\u89E3\u6240\u9700\u7684\u4F9D\u636E\uFF0C\u6309\u91CD\u8981\u6027\u53D6\u820D\uFF0C\u907F\u514D\u9010\u9879\u590D\u8FF0\u539F\u6587\u3002\n\u7528\u5C3D\u53EF\u80FD\u5C11\u7684\u8BDD\u8BB2\u6E05\u695A\uFF0C\u957F\u5EA6\u968F\u5185\u5BB9\u51B3\u5B9A\uFF0C\u6BCF\u53E5\u8BDD\u90FD\u8981\u63D0\u4F9B\u6709\u7528\u4FE1\u606F\u3002\u7528\u5E38\u7528\u3001\u5177\u4F53\u3001\u5B9A\u4E49\u6E05\u695A\u7684\u8BCD\uFF1B\u5FC5\u8981\u7684\u4E13\u4E1A\u8BCD\u968F\u5373\u7528\u5E38\u8BC6\u80FD\u7406\u89E3\u7684\u8BDD\u89E3\u91CA\u3002\u4E25\u7981\u81EA\u521B\u8BCD\u6C47\u3001\u7A7A\u6CDB\u672F\u8BED\u3001\u5957\u8BDD\u3001\u5F00\u573A\u548C\u91CD\u590D\u603B\u7ED3\u3002\n\u7981\u6B62\u4EFB\u4F55\u9632\u5FA1\u6027\u8BED\u8A00\u3001\u514D\u8D23\u58F0\u660E\u3001\u81EA\u6211\u8FA9\u62A4\u548C\u9884\u9632\u6027\u6F84\u6E05\u3002\u7981\u6B62\u201C\u4E0D\u662FA\u800C\u662FB\u201D\u201C\u65E2\u4E0D\u662FA\u4E5F\u4E0D\u662FB\u201D\u201C\u8FD9\u4E0D\u4EE3\u8868\u2026\u2026\u201D\u7B49\u5426\u5B9A\u5BF9\u6BD4\u3002\u628A\u610F\u601D\u76F4\u63A5\u5199\u6210\u5177\u4F53\u4E8B\u5B9E\u3002\u5F71\u54CD\u7528\u6237\u5224\u65AD\u7684\u5931\u8D25\u3001\u672A\u5B8C\u6210\u4E8B\u9879\u548C\u5FC5\u8981\u6761\u4EF6\uFF0C\u7B80\u6D01\u4EA4\u4EE3\u3002\n\u53EA\u4F9D\u636E\u5DF2\u6709\u5185\u5BB9\u89E3\u91CA\uFF0C\u4E0D\u7F16\u9020\u4E8B\u5B9E\uFF0C\u4E0D\u7EE7\u7EED\u6267\u884C\u4EFB\u52A1\uFF0C\u4E0D\u8C03\u7528\u5DE5\u5177\uFF0C\u4E0D\u8BFB\u5199\u6587\u4EF6\uFF0C\u4E0D\u5411\u4E3B\u804A\u5929\u53D1\u9001\u6D88\u606F\u3002";
+function snapshotThroughTurn(text, turnId) {
+  const lines = text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter(Boolean);
+  const kept = [];
+  let found = false;
+  let context;
+  for (const line of lines) {
+    const item = JSON.parse(line);
+    if (item.type === "turn_context") {
+      if (found && item.payload.turn_id !== turnId) break;
+      if (item.payload.turn_id === turnId) {
+        found = true;
+        context = item.payload;
+      }
+    }
+    kept.push(line);
+    if (found && item.type === "event_msg" && item.payload.type === "task_complete" && item.payload.turn_id === turnId) break;
+  }
+  if (!found) throw new Error("\u4FDD\u5B58\u8BB0\u5F55\u4E2D\u8FD8\u6CA1\u6709\u8FD9\u6761\u56DE\u590D\u7684\u4E0A\u4E0B\u6587\u3002");
+  return { text: kept.join("\n") + "\n", context };
+}
+function relativeRolloutPath(sourceHome, source) {
+  const relative = path3.relative(path3.toNamespacedPath(sourceHome), path3.toNamespacedPath(path3.resolve(source)));
+  if (relative.startsWith("..") || path3.isAbsolute(relative)) throw new Error("\u804A\u5929\u8BB0\u5F55\u4E0D\u5728\u6307\u5B9A\u7684 Codex \u5B58\u50A8\u76EE\u5F55\u4E2D\u3002");
+  return relative;
+}
+
+// src/prompts.mjs
+var defaultPrompts = Object.freeze({ explanation: explanationPrompt, question: questionPrompt });
+function promptId(prompt) {
+  return createHash("sha256").update(prompt).digest("hex");
+}
+function validate(prompts) {
+  for (const key of ["explanation", "question"])
+    if (typeof prompts?.[key] !== "string" || prompts[key].length > 32e3) throw new Error("\u6BCF\u9879\u63D0\u793A\u8BCD\u987B\u4E3A\u6587\u5B57\uFF0C\u6700\u591A 32000 \u5B57\u3002");
+  return { explanation: prompts.explanation, question: prompts.question };
+}
+async function readPrompts(dataRoot2) {
+  const saved = await readJson(path4.join(dataRoot2, "prompt-settings.json"));
+  return saved === null ? { ...defaultPrompts } : validate(saved);
+}
+
 // src/worker-client.mjs
 function workerFiles(dataRoot2) {
-  const directory = path3.join(path3.resolve(dataRoot2), "backend");
-  return { directory, state: path3.join(directory, "state.json"), pending: path3.join(directory, "request.json") };
+  const directory = path5.join(path5.resolve(dataRoot2), "backend");
+  return { directory, state: path5.join(directory, "state.json"), pending: path5.join(directory, "request.json") };
 }
 async function liveWorker(dataRoot2) {
   const state = await readJson(workerFiles(dataRoot2).state);
@@ -7353,10 +7402,10 @@ async function liveWorker(dataRoot2) {
 async function ensureWorker({ root: root2, dataRoot: dataRoot2, sourceHome }) {
   if (await liveWorker(dataRoot2)) return;
   const settings2 = await loadSettings(root2);
-  const diagnostics = openSync(path3.join(dataRoot2, "worker-error.log"), "w");
+  const diagnostics = openSync(path5.join(dataRoot2, "worker-error.log"), "w");
   let child;
   try {
-    child = spawn(process.execPath, [path3.join(root2, "dist/worker.mjs"), dataRoot2, sourceHome, settings2.cliPath], {
+    child = spawn(process.execPath, [path5.join(root2, "dist/worker.mjs"), dataRoot2, sourceHome, settings2.cliPath], {
       cwd: root2,
       env: process.env,
       windowsHide: true,
@@ -7386,13 +7435,16 @@ async function enqueueStop(event, { dataRoot: dataRoot2 }) {
   if (!event.last_assistant_message?.trim() || !event.transcript_path) return;
   const selection = await activeSelection(dataRoot2);
   if (selection?.threadId !== event.session_id) return;
+  const prompt = (await readPrompts(dataRoot2)).explanation;
+  const settingsId = promptId(prompt);
   const previous = await readExplanation(dataRoot2, event.session_id);
-  if (previous.turnId === event.turn_id && previous.status !== "error") return;
+  if (previous.turnId === event.turn_id && previous.promptId === settingsId && previous.status !== "error") return;
   const files = explanationFiles(dataRoot2, selection, event.turn_id);
   const worker = await liveWorker(dataRoot2);
   await writeJson(files.result, {
     threadId: event.session_id,
     turnId: event.turn_id,
+    promptId: settingsId,
     status: worker ? "queued" : "error",
     workerPid: worker?.pid,
     ...worker ? {} : { error: "\u89E3\u91CA\u540E\u53F0\u5DF2\u7ED3\u675F\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u5C0F\u7A97\u3002" },
@@ -7401,18 +7453,18 @@ async function enqueueStop(event, { dataRoot: dataRoot2 }) {
   await writeJson(files.latest, { turnId: event.turn_id });
   if (previous.turnId && previous.turnId !== event.turn_id) await rm2(explanationFiles(dataRoot2, selection, previous.turnId).result, { force: true });
   if (!worker) return;
-  await writeJson(workerFiles(dataRoot2).pending, { openId: selection.openId, event });
+  await writeJson(workerFiles(dataRoot2).pending, { openId: selection.openId, event, prompt });
 }
 
 // src/floating.mjs
 import { spawn as spawn2 } from "node:child_process";
 import { mkdir as mkdir2 } from "node:fs/promises";
-import path4 from "node:path";
+import path6 from "node:path";
 import { setTimeout as delay3 } from "node:timers/promises";
 async function readThreadName(sourceHome, threadId) {
   const { DatabaseSync: DatabaseSync2 } = await import("node:sqlite");
   threadDirectory(sourceHome, threadId);
-  const database = new DatabaseSync2(path4.join(sourceHome, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync2(path6.join(sourceHome, "state_5.sqlite"), { readOnly: true });
   try {
     const thread = database.prepare("SELECT name, title FROM threads WHERE id = ?").get(threadId);
     if (!thread) throw new Error("\u6CA1\u6709\u627E\u5230\u8FD9\u6BB5\u804A\u5929\u7684\u540D\u79F0\u3002");
@@ -7422,15 +7474,15 @@ async function readThreadName(sourceHome, threadId) {
   }
 }
 async function openFloatingWindow({ root: root2, dataRoot: dataRoot2, sourceHome, threadId, title }) {
-  const directory = path4.join(dataRoot2, "floating");
-  const temporary = path4.join(directory, "tmp");
+  const directory = path6.join(dataRoot2, "floating");
+  const temporary = path6.join(directory, "tmp");
   await mkdir2(temporary, { recursive: true });
   if (threadId) await selectChat(dataRoot2, threadId, title);
   if (await isWindowOpen(dataRoot2)) {
     await ensureWorker({ root: root2, dataRoot: dataRoot2, sourceHome });
     return;
   }
-  const child = spawn2(path4.join(root2, "dist", "floating.exe"), [dataRoot2, sourceHome, process.execPath], {
+  const child = spawn2(path6.join(root2, "dist", "floating.exe"), [dataRoot2, sourceHome, process.execPath], {
     cwd: root2,
     env: { ...process.env, TMP: temporary, TEMP: temporary },
     windowsHide: false,
@@ -7456,41 +7508,11 @@ import os2 from "node:os";
 
 // src/latest.mjs
 import { DatabaseSync } from "node:sqlite";
-import path7 from "node:path";
+import path8 from "node:path";
 
 // src/history.mjs
 import { readFile as readFile3, readdir as readdir2 } from "node:fs/promises";
-import path6 from "node:path";
-
-// src/context.mjs
-import path5 from "node:path";
-function snapshotThroughTurn(text, turnId) {
-  const lines = text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter(Boolean);
-  const kept = [];
-  let found = false;
-  let context;
-  for (const line of lines) {
-    const item = JSON.parse(line);
-    if (item.type === "turn_context") {
-      if (found && item.payload.turn_id !== turnId) break;
-      if (item.payload.turn_id === turnId) {
-        found = true;
-        context = item.payload;
-      }
-    }
-    kept.push(line);
-    if (found && item.type === "event_msg" && item.payload.type === "task_complete" && item.payload.turn_id === turnId) break;
-  }
-  if (!found) throw new Error("\u4FDD\u5B58\u8BB0\u5F55\u4E2D\u8FD8\u6CA1\u6709\u8FD9\u6761\u56DE\u590D\u7684\u4E0A\u4E0B\u6587\u3002");
-  return { text: kept.join("\n") + "\n", context };
-}
-function relativeRolloutPath(sourceHome, source) {
-  const relative = path5.relative(path5.toNamespacedPath(sourceHome), path5.toNamespacedPath(path5.resolve(source)));
-  if (relative.startsWith("..") || path5.isAbsolute(relative)) throw new Error("\u804A\u5929\u8BB0\u5F55\u4E0D\u5728\u6307\u5B9A\u7684 Codex \u5B58\u50A8\u76EE\u5F55\u4E2D\u3002");
-  return relative;
-}
-
-// src/history.mjs
+import path7 from "node:path";
 async function readRolloutHistory(sourceHome, source) {
   async function readSegment(file, end) {
     relativeRolloutPath(sourceHome, file);
@@ -7504,14 +7526,14 @@ async function readRolloutHistory(sourceHome, source) {
     for (const folder of ["sessions", "archived_sessions"]) {
       let entries;
       try {
-        entries = await readdir2(path6.join(sourceHome, folder), { recursive: true, withFileTypes: true });
+        entries = await readdir2(path7.join(sourceHome, folder), { recursive: true, withFileTypes: true });
       } catch (error2) {
         if (error2.code === "ENOENT") continue;
         throw error2;
       }
       const entry = entries.find((item) => item.isFile() && (item.name.endsWith("-" + base.thread_id + ".jsonl") || item.name.endsWith("_" + base.thread_id + ".jsonl")));
       if (entry) {
-        parent = path6.join(entry.parentPath, entry.name);
+        parent = path7.join(entry.parentPath, entry.name);
         break;
       }
     }
@@ -7525,7 +7547,7 @@ async function readRolloutHistory(sourceHome, source) {
 // src/latest.mjs
 async function latestReplyEvent(sourceHome, threadId) {
   threadDirectory(sourceHome, threadId);
-  const database = new DatabaseSync(path7.join(sourceHome, "state_5.sqlite"), { readOnly: true });
+  const database = new DatabaseSync(path8.join(sourceHome, "state_5.sqlite"), { readOnly: true });
   let transcript;
   try {
     const thread = database.prepare("SELECT rollout_path FROM threads WHERE id = ?").get(threadId);
@@ -7559,7 +7581,7 @@ async function latestReplyEvent(sourceHome, threadId) {
 
 // src/server.mjs
 import { readFile as readFile4 } from "node:fs/promises";
-import path8 from "node:path";
+import path9 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
@@ -7936,8 +7958,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path9, errorMaps, issueData } = params;
-  const fullPath = [...path9, ...issueData.path || []];
+  const { data, path: path10, errorMaps, issueData } = params;
+  const fullPath = [...path10, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -8052,11 +8074,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path9, key) {
+  constructor(parent, value, path10, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path9;
+    this._path = path10;
     this._key = key;
   }
   get path() {
@@ -11694,10 +11716,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path9) {
-  if (!path9)
+function getElementAtPath(obj, path10) {
+  if (!path10)
     return obj;
-  return path9.reduce((acc, key) => acc?.[key], obj);
+  return path10.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -12037,11 +12059,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path9, issues) {
+function prefixIssues(path10, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path9);
+    iss.path.unshift(path10);
     return iss;
   });
 }
@@ -12499,16 +12521,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path9 = []) => {
+  const processError = (error3, path10 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path9, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path9, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
       } else {
-        const fullpath = [...path9, ...issue2.path];
+        const fullpath = [...path10, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -12621,7 +12643,7 @@ var _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
 var safeParseAsync = /* @__PURE__ */ _safeParseAsync($ZodRealError);
 var COMPILE_INVALID = /* @__PURE__ */ Symbol.for("zod.compile.invalid");
 var COMPILE_FALLBACK = /* @__PURE__ */ Symbol.for("zod.compile.fallback");
-var validate = ((schema, value, _ctx) => {
+var validate2 = ((schema, value, _ctx) => {
   const validator = schema._zod.bag.validator;
   if (validator !== void 0) {
     if (validator(value) !== COMPILE_INVALID)
@@ -17194,11 +17216,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path9) {
-  if (path9.length === 0) {
+function getDotPath(path10) {
+  if (path10.length === 0) {
     return "object root";
   }
-  return path9.reduce((acc, seg, index) => {
+  return path10.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -17472,7 +17494,7 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
     util_exports.own(this, "spa", value);
   },
   validate(data, params) {
-    return validate(this, data, params);
+    return validate2(this, data, params);
   },
   validateAsync(data, params) {
     return validateAsync(this, data, params);
@@ -23851,7 +23873,7 @@ var StdioServerTransport = class {
 };
 
 // src/server.mjs
-var root = path8.resolve(path8.dirname(fileURLToPath(import.meta.url)), "..");
+var root = path9.resolve(path9.dirname(fileURLToPath(import.meta.url)), "..");
 var settings = await loadSettings(root);
 var dataRoot = settings.dataDirectory;
 var resource = "ui://reply-explainer/panel.html";
@@ -23860,7 +23882,7 @@ server.registerResource("reply-explainer-panel", resource, { mimeType: "text/htm
   contents: [{
     uri: resource,
     mimeType: "text/html;profile=mcp-app",
-    text: await readFile4(path8.join(root, "dist", "panel.html"), "utf8"),
+    text: await readFile4(path9.join(root, "dist", "panel.html"), "utf8"),
     _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] } } }
   }]
 }));
@@ -23890,7 +23912,7 @@ async function ensureLatest(threadId) {
   const state = await readExplanation(dataRoot, threadId);
   if ((await activeSelection(dataRoot))?.threadId !== threadId) return state;
   if (state.status === "generating") return state;
-  const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path8.join(os2.homedir(), ".codex");
+  const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path9.join(os2.homedir(), ".codex");
   const event = await latestReplyEvent(sourceHome, threadId);
   if (!event) return { threadId, status: "unavailable" };
   if (event.turn_id === state.turnId) return state;
@@ -23907,7 +23929,7 @@ server.registerTool("reply_explainer.open_floating", {
 }, async (_input, extra) => {
   const threadId = extra._meta?.threadId;
   if (typeof threadId !== "string") throw new Error("\u8BF7\u4ECE\u5F53\u524D\u804A\u5929\u6253\u5F00 Codex \u56DE\u590D\u89E3\u91CA\u3002");
-  const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path8.join(os2.homedir(), ".codex");
+  const sourceHome = process.env.REPLY_EXPLAINER_SOURCE_HOME || process.env.CODEX_HOME || path9.join(os2.homedir(), ".codex");
   const title = await readThreadName(sourceHome, threadId);
   await openFloatingWindow({ root, dataRoot, sourceHome, threadId, title });
   const state = await readExplanation(dataRoot, threadId);

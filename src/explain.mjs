@@ -4,7 +4,8 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { threadDirectory, writeJson, readJson, activeSelection, isRetainedSelection, explanationFiles, discardSelection, readExplanation } from "./state.mjs";
-import { explanationPrompt, snapshotThroughTurn, relativeRolloutPath } from "./context.mjs";
+import { snapshotThroughTurn, relativeRolloutPath } from "./context.mjs";
+import { readPrompts, promptId, explanationInstructions } from "./prompts.mjs";
 export { explanationPrompt, snapshotThroughTurn, relativeRolloutPath, requestUsage } from "./context.mjs";
 
 export async function copyRuntimeInputs(sourceHome, home) {
@@ -15,21 +16,23 @@ export async function copyRuntimeInputs(sourceHome, home) {
   await copyFile(path.join(sourceHome, "auth.json"), path.join(home, "auth.json"));
 }
 
-export async function explainStop(event, { dataRoot, sourceHome, backend, selection: requestedSelection }) {
+export async function explainStop(event, { dataRoot, sourceHome, backend, selection: requestedSelection, prompt: requestedPrompt }) {
   threadDirectory(dataRoot, event.session_id);
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(event.turn_id)) throw new Error("回复标识无效。");
   if (!event.last_assistant_message?.trim() || !event.transcript_path) return;
   const selection = requestedSelection || await activeSelection(dataRoot);
   if (selection?.threadId !== event.session_id) return;
+  const prompt = requestedPrompt ?? (await readPrompts(dataRoot)).explanation;
+  const settingsId = promptId(prompt);
   const previous = await readExplanation(dataRoot, event.session_id);
-  if (previous.turnId === event.turn_id && previous.status !== "queued") return;
+  if (previous.turnId === event.turn_id && previous.promptId === settingsId && previous.status !== "queued") return;
   const files = explanationFiles(dataRoot, selection, event.turn_id);
   const runs = path.join(path.resolve(dataRoot), "runs");
   const run = path.join(runs, selection.openId + "-" + event.turn_id);
   await mkdir(runs, { recursive: true });
   try { await mkdir(run); }
   catch (error) { if (error.code === "EEXIST") return; throw error; }
-  const state = { threadId: event.session_id, turnId: event.turn_id, status: "generating", workerPid: process.pid, startedAt: new Date().toISOString() };
+  const state = { threadId: event.session_id, turnId: event.turn_id, promptId: settingsId, status: "generating", workerPid: process.pid, startedAt: new Date().toISOString() };
   const cancel = new AbortController();
   let finished = false, monitor, monitorError, finalState, saved, partial = "", displayed = "";
   try {
@@ -53,7 +56,7 @@ export async function explainStop(event, { dataRoot, sourceHome, backend, select
       }
     })().catch(error => { monitorError = error; cancel.abort(error); });
     const result = await backend.generate({ threadId: snapshotId, path: saved, context, metadata,
-      prompt: explanationPrompt, signal: cancel.signal, onText: text => { partial = text; } });
+      prompt: explanationInstructions(prompt), signal: cancel.signal, onText: text => { partial = text; } });
     finalState = { ...state, status: "ready", text: result.text, completedAt: new Date().toISOString(),
       usage: result.usage, backendPid: backend.child.pid, branchId: result.branchId, timings: result.timings };
   } catch (error) {

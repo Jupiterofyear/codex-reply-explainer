@@ -1,7 +1,6 @@
 import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
-import { questionPrompt } from "./context.mjs";
 
 export class AppServerBackend {
   constructor({ cliPath, home, directory, cwd }) {
@@ -82,7 +81,7 @@ export class AppServerBackend {
       else active.reject(new Error(params.turn.error?.message || "解释生成结束：" + params.turn.status));
     }
   }
-  async fork({ threadId, path, context, metadata, questions = false }) {
+  async fork({ threadId, path, context, metadata, questions = false, developerInstructions }) {
     if (this.active) throw new Error("解释后台正在处理另一条回复。");
     const config = { model_reasoning_effort: context.effort };
     if (questions) {
@@ -95,7 +94,7 @@ export class AppServerBackend {
     }
     const fork = await this.request("thread/fork", { threadId, path, ephemeral: true, excludeTurns: true,
       model: context.model, modelProvider: metadata.model_provider, cwd: context.cwd,
-      ...questions ? { developerInstructions: questionPrompt, sandbox: "read-only", approvalPolicy: "untrusted", approvalsReviewer: "user" } : {}, config });
+      ...questions ? { developerInstructions, sandbox: "read-only", approvalPolicy: "untrusted", approvalsReviewer: "user" } : {}, config });
     return { id: fork.thread.id, context, fork: { forkedFromId: fork.thread.forkedFromId, path: fork.thread.path,
       model: fork.model, modelProvider: fork.modelProvider, reasoningEffort: fork.reasoningEffort } };
   }

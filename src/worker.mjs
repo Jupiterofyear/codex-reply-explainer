@@ -61,7 +61,7 @@ try {
         catch (error) { if (error.code !== "ENOENT") throw error; await delay(50); continue; }
         const request = await readJson(processing);
         const selection = (await retainedSelections(dataRoot)).find(item => item.openId === request.openId);
-        if (selection) await explainStop(request.event, { dataRoot, sourceHome, backend, selection });
+        if (selection) await explainStop(request.event, { dataRoot, sourceHome, backend, selection, prompt: request.prompt });
         await rm(processing, { force: true });
       }
     })(),

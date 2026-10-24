@@ -95,10 +95,11 @@ class FloatingExplanation {
  <Border BorderBrush=""#E5E5E5"" BorderThickness=""1"" CornerRadius=""12"" Background=""White"">
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height=""48""/><RowDefinition Height=""44""/><RowDefinition Height=""38""/><RowDefinition Height=""*""/></Grid.RowDefinitions>
-   <Grid Margin=""20,0,8,0""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/></Grid.ColumnDefinitions>
+   <Grid Margin=""20,0,8,0""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/></Grid.ColumnDefinitions>
     <TextBlock Text=""Codex 回复解释"" FontSize=""14"" FontWeight=""SemiBold"" VerticalAlignment=""Center""/>
-    <Button x:Name=""Minimize"" Grid.Column=""1"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""最小化"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 10,0"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
-    <Button x:Name=""CloseWindow"" Grid.Column=""2"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""关闭"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 9,9 M 9,0 L 0,9"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
+    <Button x:Name=""Settings"" Grid.Column=""1"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""提示词设置"" ToolTip=""提示词设置"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><TextBlock Text=""⚙"" FontFamily=""Segoe UI Symbol"" FontSize=""18""/></Button>
+    <Button x:Name=""Minimize"" Grid.Column=""2"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""最小化"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 10,0"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
+    <Button x:Name=""CloseWindow"" Grid.Column=""3"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""关闭"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 9,9 M 9,0 L 0,9"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
    </Grid>
    <TabControl x:Name=""Pages"" Grid.Row=""1"" Grid.RowSpan=""3"" Background=""White"" BorderThickness=""0"" SelectedIndex=""0"">
     <TabControl.Template><ControlTemplate TargetType=""TabControl""><Grid><Grid.RowDefinitions><RowDefinition Height=""44""/><RowDefinition Height=""38""/><RowDefinition Height=""*""/></Grid.RowDefinitions><Border BorderBrush=""#EAEAEA"" BorderThickness=""0,0,0,1"" Padding=""22,0,0,0""><TabPanel IsItemsHost=""True""/></Border><ContentPresenter x:Name=""PART_SelectedContentHost"" Grid.Row=""2"" ContentSource=""SelectedContent""/></Grid></ControlTemplate></TabControl.Template>
@@ -147,6 +148,13 @@ class FloatingExplanation {
                 var askChatName = (TextBlock)window.FindName("AskChatName");
                 var welcome = (StackPanel)window.FindName("QuestionWelcome");
                 var hint = (TextBlock)window.FindName("QuestionHint");
+                var settingsButton = (Button)window.FindName("Settings");
+                settingsButton.Click += async (sender, ev) => {
+                    settingsButton.IsEnabled = false;
+                    try { await PromptSettings.Show(window, node, dataRoot, DesktopFonts.Read(Path.Combine(sourceHome, "config.toml")).Sans); }
+                    catch (Exception error) { MessageBox.Show(window, error.Message, "无法打开提示词设置", MessageBoxButton.OK, MessageBoxImage.Error); }
+                    finally { settingsButton.IsEnabled = true; }
+                };
                 ((Button)window.FindName("Minimize")).Click += (sender, ev) => window.WindowState = WindowState.Minimized;
                 ((Button)window.FindName("CloseWindow")).Click += (sender, ev) => window.Close();
                 var layoutFile = Path.Combine(dataRoot, "window-layout.json");

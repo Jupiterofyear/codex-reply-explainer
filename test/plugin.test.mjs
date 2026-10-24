@@ -13,6 +13,7 @@ import { readExplanation, threadDirectory, writeJson, selectChat, explanationFil
 
 import { enqueueStop, liveWorker } from "../src/worker-client.mjs";
 import { submitQuestion, questionFiles } from "../src/questions.mjs";
+import { defaultPrompts, readPrompts, savePrompts, promptId, questionInstructions, explanationInstructions } from "../src/prompts.mjs";
 const workers=[];
 const root = path.resolve(".");
 const testRoot = await mkdtemp(path.join(root, ".local/test-"));
@@ -392,8 +393,70 @@ async function questionReady(w, selection) {
  return await until(async()=>{const control=await readJson(questionFiles(w.data,selection).control),s=await readJson(questionFiles(w.data,selection).result);return s?.requestId===control?.requestId&&["ready","error","stopped"].includes(s?.status)&&s;});
 }
 
+test("prompt settings persist Unicode and blank values, and invalid saves preserve the file", async()=>{
+ const data=path.join(testRoot,"prompts");
+ assert.deepEqual(await readPrompts(data),defaultPrompts);
+ const custom={explanation:"先给结论。\n再写关键依据：α²。",question:""};
+ await savePrompts(data,custom);assert.deepEqual(await readPrompts(data),custom);
+ const before=await readFile(path.join(data,"prompt-settings.json"));
+ for(const invalid of [null,{explanation:1,question:"x"},{explanation:"x",question:"x".repeat(32001)}])
+  await assert.rejects(savePrompts(data,invalid),/最多 32000/);
+ assert.deepEqual(await readFile(path.join(data,"prompt-settings.json")),before);
+ const get=()=>JSON.parse(execFileSync(process.execPath,["dist/prompt-request.mjs",data,"get"],{encoding:"utf8",windowsHide:true}));
+ assert.deepEqual(get(),{prompts:custom,defaults:defaultPrompts});
+ execFileSync(process.execPath,["dist/prompt-request.mjs",data,"save"],{input:JSON.stringify(defaultPrompts),encoding:"utf8",windowsHide:true});
+ assert.deepEqual(get().prompts,defaultPrompts);
+});
+
+test("changed question instructions refresh the fork with visible history while explanation-only changes reuse it",async()=>{
+ const w=await launchWorker("custom-question-prompts");const selection=await registerSource(w);
+ const custom={...defaultPrompts,question:"先给结论，再用两条证据说明。"};await savePrompts(w.data,custom);
+ await submitQuestion(w.data,selection.openId,"ask","第一问");const a=await questionReady(w,selection);
+ assert.equal(a.status,"ready",a.error);
+ let forks=(await records(w)).filter(x=>x.method==="thread/fork");
+ assert.equal(forks[0].input.developerInstructions,questionInstructions(custom.question));
+ await savePrompts(w.data,{...custom,explanation:"只解释最关键的结论。"});
+ await submitQuestion(w.data,selection.openId,"ask","第二问");const b=await questionReady(w,selection);assert.equal(b.branchId,a.branchId);
+ await savePrompts(w.data,{...custom,question:""});
+ await submitQuestion(w.data,selection.openId,"ask","第三问");const c=await questionReady(w,selection);
+ assert.equal(c.status,"ready",c.error);assert.notEqual(c.branchId,a.branchId);assert.deepEqual(c.messages.slice(0,4),b.messages);
+ const calls=await records(w);forks=calls.filter(x=>x.method==="thread/fork");
+ assert.equal(forks.length,2);assert.equal(forks[1].input.developerInstructions,questionInstructions(""));
+ assert.deepEqual(JSON.parse(calls.filter(x=>x.method==="turn/start").at(-1).prompt.split("\n")[1]),{past_window_discussion:b.messages});
+ await stopWorker(w);assert.equal((await readPrompts(w.data)).question,"");
+});
+
+test("explanation prompt changes regenerate the same main reply and unchanged settings deduplicate",async()=>{
+ const w=await launchWorker("custom-explanation-prompts");
+ const custom={...defaultPrompts,explanation:"解释这段回复的实际影响，最多三句。"};await savePrompts(w.data,custom);
+ await enqueueStop(w.event,{dataRoot:w.data});let a=await ready(w);assert.equal(a.status,"ready",a.error);
+ assert.equal((await records(w)).find(x=>x.method==="turn/start").prompt,explanationInstructions(custom.explanation));
+ await savePrompts(w.data,{...custom,question:"改用列表回答。"});await enqueueStop(w.event,{dataRoot:w.data});
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start").length,1);
+ const changed={...custom,explanation:""};await savePrompts(w.data,changed);
+ await enqueueStop(w.event,{dataRoot:w.data});a=await ready(w);assert.equal(a.status,"ready",a.error);assert.equal(a.promptId,promptId(""));
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start").at(-1).prompt,"请解释主对话最后一条已完成回复。");
+ await enqueueStop(w.event,{dataRoot:w.data});assert.equal((await records(w)).filter(x=>x.method==="turn/start").length,2);
+ await stopWorker(w);assert.deepEqual(await readPrompts(w.data),changed);
+});
+
+test("saving prompts during generation leaves the active answer intact and applies on the next ask",async()=>{
+ const w=await launchWorker("prompt-in-flight");const selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","PARTIAL_STOP 原问题");
+ await until(async()=>Boolean((await readJson(questionFiles(w.data,selection).result))?.partial));
+ await savePrompts(w.data,{...defaultPrompts,question:"新的回答要求。"});
+ assert.equal((await readJson(questionFiles(w.data,selection).result)).status,"generating");
+ assert.equal((await records(w)).filter(x=>x.method==="thread/fork").length,1);
+ assert.equal((await records(w)).some(x=>x.method==="turn/interrupt"),false);
+ await submitQuestion(w.data,selection.openId,"stop");const a=await questionReady(w,selection);assert.equal(a.status,"stopped");
+ await submitQuestion(w.data,selection.openId,"ask","继续");const b=await questionReady(w,selection);assert.equal(b.status,"ready",b.error);
+ assert.equal((await records(w)).filter(x=>x.method==="thread/fork").at(-1).input.developerInstructions,questionInstructions("新的回答要求。"));
+ assert.deepEqual(b.messages.slice(0,2),a.messages);await stopWorker(w);
+});
+
 test("questions refresh the fork only on send, preserve past discussion once, and reset clears it",async()=>{
  const {questionPrompt}=await import("../src/context.mjs");
+ const {questionInstructions,questionContextRules}=await import("../src/prompts.mjs");
  const w=await launchWorker("question-multiple");const selection=await registerSource(w);
  const original=await readFile(w.transcript),databaseBefore=await readFile(path.join(w.source,"state_5.sqlite"));
  await submitQuestion(w.data,selection.openId,"ask","第一问：结合我的偏好回答");
@@ -408,7 +471,7 @@ test("questions refresh the fork only on send, preserve past discussion once, an
  const c=await questionReady(w,selection);assert.equal(c.status,"ready",c.error);assert.notEqual(c.branchId,a.branchId);assert.equal(c.messages.length,6);assert.equal(c.sourceTurnId,"newer");
  assert.deepEqual(c.messages.slice(0,4),b.messages);assert.equal(c.messages[4].sourceTurnId,"newer");
  const calls=await records(w),forks=calls.filter(x=>x.method==="thread/fork"&&x.input.developerInstructions),fork=forks[0];
- assert.equal(forks.length,2);assert.equal(fork.input.developerInstructions,questionPrompt);assert.match(questionPrompt,/不代表当前真实进度/);assert.match(questionPrompt,/以最新主对话的证据为准/);
+ assert.equal(forks.length,2);assert.equal(fork.input.developerInstructions,questionInstructions(questionPrompt));assert.match(questionContextRules,/不代表当前真实进度/);assert.match(questionContextRules,/以最新主对话的证据为准/);
  assert.equal(fork.input.ephemeral,true);assert.equal(fork.input.sandbox,"read-only");assert.equal(fork.input.config["plugins.codex-app-tools@openai-bundled.enabled"],false);assert.equal(fork.input.config["mcp_servers.example.enabled"],false);
  assert.equal(calls.find(x=>x.method==="config/read").input.cwd,w.source);assert.equal(fork.input.config["mcp_servers.project_only.enabled"],false);
  const turns=calls.filter(x=>x.method==="turn/start"&&x.input.threadId===a.branchId);assert.equal(turns.length,2);assert.equal(turns[0].prompt,a.messages[0].text);assert.equal(turns[1].prompt,b.messages[2].text);
