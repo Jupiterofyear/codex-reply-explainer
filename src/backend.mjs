@@ -42,7 +42,7 @@ export class AppServerBackend {
     });
     this.stderr = "";
     this.child.stderr.on("data", chunk => { this.stderr = (this.stderr + chunk).slice(-8192); });
-    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.4" }, capabilities: { experimentalApi: true } });
+    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.5" }, capabilities: { experimentalApi: true } });
     this.write({ method: "initialized", params: {} });
     return this;
   }
@@ -119,7 +119,6 @@ export class AppServerBackend {
     const completed = new Promise((yes, no) => { resolve = yes; reject = no; });
     const active = { threadId: branchId, text: "", resolve, reject, toolCalls: 0, onText, onPhase, items: new Map() };
     this.active = active;
-    const timeout = setTimeout(() => reject(new Error("解释生成超时。")), 240000);
     let turnId, interrupt;
     const abort = () => {
       if (!turnId) return;
@@ -141,7 +140,7 @@ export class AppServerBackend {
       return { text: active.text, usage: [{ input_token_count: last.inputTokens, cached_token_count: last.cachedInputTokens, output_token_count: last.outputTokens }], branchId, toolCalls: active.toolCalls,
         lastTokenUsage: active.lastTokenUsage, timings: { totalMs: Date.now() - startedAt, turnStartMs: active.turnStartedAt - startedAt, firstTextMs: active.firstTextAt ? active.firstTextAt - startedAt : null } };
     } finally {
-      clearTimeout(timeout); signal?.removeEventListener("abort", abort);
+      signal?.removeEventListener("abort", abort);
       if (interrupt) await interrupt;
       this.active = null;
     }

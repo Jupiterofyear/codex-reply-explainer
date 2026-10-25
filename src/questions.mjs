@@ -53,14 +53,28 @@ export class QuestionsSession {
     await this.releaseBranch();
     this.messages = []; this.requestId = null;
   }
-  async sync(selection) {
+  async sync(selection, restoring = false) {
     const control = selection ? await readJson(questionFiles(this.dataRoot, selection).control) : null;
     if (this.selection?.openId !== selection?.openId || this.revision !== control?.revision) {
       await this.discard();
       this.selection = selection; this.revision = control?.revision;
       if (control) {
         const files = questionFiles(this.dataRoot, selection);
-        await writeJson(files.result, { revision: control.revision, status: "idle", messages: [] });
+        const previous = await readJson(files.result);
+        const saved = previous?.revision === control.revision ? previous : null;
+        this.messages = saved?.messages || [];
+        this.requestId = saved?.requestId;
+        if (saved?.partial) this.messages.push({ role: "assistant", text: saved.partial, stopped: true,
+            sourceTurnId: this.messages.at(-1)?.sourceTurnId, elapsedMs: saved.elapsedMs });
+        const pending = restoring && control.requestId && this.requestId !== control.requestId;
+        if (pending) {
+          this.messages.push({ role: "user", text: control.text });
+          this.requestId = control.requestId;
+        }
+        await writeJson(files.result, { ...saved, revision: control.revision, requestId: this.requestId,
+          messages: this.messages, partial: "", thinking: [],
+          status: pending ? "stopped" : ["ready", "stopped", "idle"].includes(saved?.status) ? saved.status : saved ? "stopped" : "idle",
+          error: undefined, branchId: undefined, workerPid: process.pid });
         if (!await isRetainedSelection(this.dataRoot, selection)) {
           await rm(files.result, { force: true }); await rm(files.control, { force: true });
         }

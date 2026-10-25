@@ -74,7 +74,7 @@ var AppServerBackend = class {
     this.child.stderr.on("data", (chunk) => {
       this.stderr = (this.stderr + chunk).slice(-8192);
     });
-    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.4" }, capabilities: { experimentalApi: true } });
+    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.5" }, capabilities: { experimentalApi: true } });
     this.write({ method: "initialized", params: {} });
     return this;
   }
@@ -180,7 +180,6 @@ var AppServerBackend = class {
     });
     const active = { threadId: branchId, text: "", resolve, reject, toolCalls: 0, onText, onPhase, items: /* @__PURE__ */ new Map() };
     this.active = active;
-    const timeout = setTimeout(() => reject(new Error("\u89E3\u91CA\u751F\u6210\u8D85\u65F6\u3002")), 24e4);
     let turnId, interrupt;
     const abort = () => {
       if (!turnId) return;
@@ -217,7 +216,6 @@ var AppServerBackend = class {
         timings: { totalMs: Date.now() - startedAt, turnStartMs: active.turnStartedAt - startedAt, firstTextMs: active.firstTextAt ? active.firstTextAt - startedAt : null }
       };
     } finally {
-      clearTimeout(timeout);
       signal?.removeEventListener("abort", abort);
       if (interrupt) await interrupt;
       this.active = null;
@@ -639,7 +637,7 @@ var QuestionsSession = class {
     this.messages = [];
     this.requestId = null;
   }
-  async sync(selection) {
+  async sync(selection, restoring = false) {
     const control = selection ? await readJson(questionFiles(this.dataRoot, selection).control) : null;
     if (this.selection?.openId !== selection?.openId || this.revision !== control?.revision) {
       await this.discard();
@@ -647,7 +645,34 @@ var QuestionsSession = class {
       this.revision = control?.revision;
       if (control) {
         const files2 = questionFiles(this.dataRoot, selection);
-        await writeJson(files2.result, { revision: control.revision, status: "idle", messages: [] });
+        const previous = await readJson(files2.result);
+        const saved = previous?.revision === control.revision ? previous : null;
+        this.messages = saved?.messages || [];
+        this.requestId = saved?.requestId;
+        if (saved?.partial) this.messages.push({
+          role: "assistant",
+          text: saved.partial,
+          stopped: true,
+          sourceTurnId: this.messages.at(-1)?.sourceTurnId,
+          elapsedMs: saved.elapsedMs
+        });
+        const pending = restoring && control.requestId && this.requestId !== control.requestId;
+        if (pending) {
+          this.messages.push({ role: "user", text: control.text });
+          this.requestId = control.requestId;
+        }
+        await writeJson(files2.result, {
+          ...saved,
+          revision: control.revision,
+          requestId: this.requestId,
+          messages: this.messages,
+          partial: "",
+          thinking: [],
+          status: pending ? "stopped" : ["ready", "stopped", "idle"].includes(saved?.status) ? saved.status : saved ? "stopped" : "idle",
+          error: void 0,
+          branchId: void 0,
+          workerPid: process.pid
+        });
         if (!await isRetainedSelection(this.dataRoot, selection)) {
           await rm3(files2.result, { force: true });
           await rm3(files2.control, { force: true });
@@ -803,7 +828,6 @@ try {
   await detachCache(questionCache);
   await rm4(files.directory, { recursive: true, force: true });
   await rm4(path9.join(dataRoot, "runs"), { recursive: true, force: true });
-  await clearQuestions();
   await writeJson(files.state, { pid: process.pid, status: "starting" });
   for (const [privateHome, directory, link] of [[home, files.directory, cache], [questionHome, questionDirectory, questionCache]]) {
     await mkdir3(path9.join(privateHome, "plugins"), { recursive: true });
@@ -815,6 +839,11 @@ try {
   questionBackend = new AppServerBackend({ cliPath, home: questionHome, directory: questionDirectory, cwd: sourceHome });
   await Promise.all([backend.start(), questionBackend.start()]);
   await Promise.all([home, questionHome].map((privateHome) => rm4(path9.join(privateHome, "auth.json"), { force: true })));
+  for (const selection of await retainedSelections(dataRoot)) {
+    const questions = new QuestionsSession({ dataRoot, sourceHome, backend: questionBackend });
+    await questions.sync(selection, true);
+    questionSessions.set(selection.openId, questions);
+  }
   await writeJson(files.state, { pid: process.pid, backendPid: backend.child.pid, questionBackendPid: questionBackend.child.pid, status: "ready" });
   monitor = (async () => {
     while (!finished) {

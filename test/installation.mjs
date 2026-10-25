@@ -98,7 +98,7 @@ try {
   await stopBackend();
   await fs.appendFile(path.join(migrationHome, "config.toml"), '\n[hooks.state."' + before.key + '"]\ntrusted_hash = "' + before.currentHash + '"\n');
   const manifestPath = path.join(repo, "plugin/.codex-plugin/plugin.json");
-  const manifest = JSON.parse(await fs.readFile(manifestPath)); manifest.version = "0.5.0-beta.5";
+  const manifest = JSON.parse(await fs.readFile(manifestPath)); manifest.version = "0.5.0-beta.6";
   await json(manifestPath, manifest); await fs.writeFile(path.join(repo, "plugin/dist/update-marker.txt"), "NEW_FIXTURE");
   await git(["add", "."]); await git(["commit", "-m", "Next fixture version"]); await git(["update-server-info"]);
   rpc = await startBackend(migrationHome);

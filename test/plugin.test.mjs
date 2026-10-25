@@ -52,6 +52,37 @@ test("a CLI spawn failure preserves the cause and finishes backend cleanup", { t
   await backend.close();
 });
 
+test("an answer can keep thinking beyond four minutes and then complete", async context => {
+  const { AppServerBackend } = await import("../src/backend.mjs");
+  const backend = new AppServerBackend({});
+  context.mock.method(backend, "request", async method => {
+    assert.equal(method, "turn/start");
+    return { turn: { id: "long-turn" } };
+  });
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  const phases = [], texts = [];
+  const answer = backend.answer({ branch: { id: first, context: { cwd: testRoot, effort: "high" } }, prompt: "继续推导", onPhase: value => phases.push(value), onText: value => texts.push(value) });
+  let outcome = "pending";
+  answer.then(() => { outcome = "ready"; }, () => { outcome = "error"; });
+  await new Promise(setImmediate);
+  const notify = (method, params) => backend.onNotification({ method, params: { threadId: first, turnId: "long-turn", ...params } });
+  notify("item/agentMessage/delta", { itemId: "first-part", delta: "先检查原方程。" });
+  notify("item/started", { item: { type: "reasoning", id: "more-thinking" } });
+  context.mock.timers.tick(5 * 60 * 1000);
+  await new Promise(setImmediate);
+  assert.equal(outcome, "pending");
+  assert.equal(phases.at(-1), "thinking");
+  notify("item/agentMessage/delta", { itemId: "final-part", delta: "完整推导结果。" });
+  notify("thread/tokenUsage/updated", { tokenUsage: { last: { inputTokens: 1000, cachedInputTokens: 900, outputTokens: 25 } } });
+  notify("turn/completed", { turn: { id: "long-turn", status: "completed" } });
+  const result = await answer;
+  assert.equal(result.text, "先检查原方程。\n\n完整推导结果。");
+  assert.ok(result.timings.totalMs >= 300000);
+  assert.deepEqual(phases, ["answering", "thinking", "answering"]);
+  assert.equal(texts.at(-1), result.text);
+  assert.equal(backend.active, null);
+});
+
 test("manual explanation reports startup failure without warnings or a stack trace", { timeout: 15000 }, async () => {
   const fixture = await fakeSource("startup-failure");
   const data = path.join(testRoot, "startup-failure-data");
@@ -452,6 +483,28 @@ test("opening an existing floating window requests activation and preserves its 
  await stopWorker(w);
 });
 
+test("restored questions keep visible history and interrupted text without replaying the old request",async()=>{
+ const name="restore-question-history",w=await launchWorker(name),selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","第一问");const answer=await questionReady(w,selection);assert.equal(answer.status,"ready",answer.error);
+ const files=questionFiles(w.data,selection),control=await readJson(files.control),chats=await readJson(path.join(w.data,"floating/chats.json"));
+ await stopWorker(w);
+ const messages=[...answer.messages,{role:"user",text:"超时前的问题",sourceTurnId:"done"}];
+ await writeJson(path.join(w.data,"floating/chats.json"),chats);await writeJson(path.join(w.data,"floating/selection.json"),selection);
+ await writeJson(files.control,{...control,requestId:"old-timeout",text:"超时前的问题"});
+ await writeJson(files.result,{...answer,requestId:"old-timeout",status:"error",messages,partial:"超时前已输出的片段。",error:"解释生成超时。",elapsedMs:240000});
+ const restarted=await launchWorker(name);
+ const restored=await until(async()=>{const state=await readJson(files.result);return state?.workerPid===restarted.child.pid&&state;});
+ assert.equal(restored.status,"stopped");assert.equal(restored.error,undefined);assert.equal(restored.partial,"");assert.equal(restored.branchId,undefined);
+ assert.deepEqual(restored.messages.slice(0,-1),messages);assert.equal(restored.messages.at(-1).text,"超时前已输出的片段。");assert.equal(restored.messages.at(-1).stopped,true);
+ assert.equal((await records(restarted)).filter(x=>x.method==="turn/start").length,1);
+ await submitQuestion(restarted.data,selection.openId,"ask","继续讨论");const continued=await questionReady(restarted,selection);
+ assert.equal(continued.status,"ready",continued.error);assert.notEqual(continued.branchId,answer.branchId);assert.deepEqual(continued.messages.slice(0,restored.messages.length),restored.messages);
+ const calls=await records(restarted),prompt=calls.filter(x=>x.method==="turn/start").at(-1).prompt;
+ assert.deepEqual(JSON.parse(prompt.split("\n")[1]),{past_window_discussion:restored.messages});
+ assert.equal(calls.filter(x=>x.method==="turn/start").length,2);
+ await stopWorker(restarted);
+});
+
 test("prompt settings persist Unicode and blank values, and invalid saves preserve the file", async()=>{
  const data=path.join(testRoot,"prompts");
  assert.deepEqual(await readPrompts(data),defaultPrompts);
@@ -791,11 +844,12 @@ test("the floating request restarts a dead worker for the same chat and cleans a
  await submitQuestion(w.data,selection.openId,"ask","do not replay after crash");
  execFileSync("taskkill.exe",["/PID",String(w.child.pid),"/T","/F"],{windowsHide:true,stdio:"ignore"});
  await until(()=>w.child.exitCode!==null);
+ const previousStarts=(await records(w)).filter(x=>x.method==="turn/start").length;
  const dead=await readExplanation(w.data,first);
  assert.equal(dead.status,"error"); assert.match(dead.error,/后台已退出/);
  await writeFile(w.transcript,(await readFile(w.transcript,"utf8")).replace("WAIT_FOR_CANCEL","finished reply"));
  const before=await readFile(w.transcript);
- const request=spawn(process.execPath,["dist/request.mjs",w.data,w.source,first],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"],env:{...process.env,CODEX_CLI_PATH:fakeCli}});
+ const request=spawn(process.execPath,["dist/request.mjs",w.data,w.source,first],{cwd:root,windowsHide:true,stdio:["ignore","ignore","pipe"],env:{...process.env,CODEX_CLI_PATH:fakeCli,FAKE_RECORD:w.record}});
  let stderr=""; request.stderr.on("data",chunk=>stderr+=chunk);
  assert.equal(await new Promise(resolve=>request.once("exit",resolve)),0,stderr);
  const state=await ready(w);
@@ -803,8 +857,9 @@ test("the floating request restarts a dead worker for the same chat and cleans a
  assert.notEqual(state.backendPid,w.state.backendPid);
  assert.deepEqual(state.usage,[{input_token_count:1000,cached_token_count:900,output_token_count:25}]);
  assert.deepEqual(await readFile(w.transcript),before);
- await assert.rejects(access(questionFiles(w.data,selection).control),{code:"ENOENT"});
- await assert.rejects(access(questionFiles(w.data,selection).result),{code:"ENOENT"});
+ const restored=await readJson(questionFiles(w.data,selection).result);
+ assert.equal(restored.status,"stopped");assert.equal(restored.messages.at(-1).text,"do not replay after crash");
+ assert.equal((await records(w)).filter(x=>x.method==="turn/start").length,previousStarts+1);
  assert.deepEqual(await readdir(path.join(w.data,"runs")),[]);
  await access(path.join(w.data,"worker-error.log"));
  await rm(path.join(w.data,"floating/window.json"));

@@ -35,7 +35,6 @@ try {
   await detachCache(questionCache);
   await rm(files.directory, { recursive: true, force: true });
   await rm(path.join(dataRoot, "runs"), { recursive: true, force: true });
-  await clearQuestions();
   await writeJson(files.state, { pid: process.pid, status: "starting" });
   for (const [privateHome, directory, link] of [[home, files.directory, cache], [questionHome, questionDirectory, questionCache]]) {
     await mkdir(path.join(privateHome, "plugins"), { recursive: true });
@@ -47,6 +46,11 @@ try {
   questionBackend = new AppServerBackend({ cliPath, home: questionHome, directory: questionDirectory, cwd: sourceHome });
   await Promise.all([backend.start(), questionBackend.start()]);
   await Promise.all([home, questionHome].map(privateHome => rm(path.join(privateHome, "auth.json"), { force: true })));
+  for (const selection of await retainedSelections(dataRoot)) {
+    const questions = new QuestionsSession({ dataRoot, sourceHome, backend: questionBackend });
+    await questions.sync(selection, true);
+    questionSessions.set(selection.openId, questions);
+  }
   await writeJson(files.state, { pid: process.pid, backendPid: backend.child.pid, questionBackendPid: questionBackend.child.pid, status: "ready" });
   monitor = (async () => {
     while (!finished) {

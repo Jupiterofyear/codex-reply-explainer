@@ -23906,7 +23906,7 @@ var root = path9.resolve(path9.dirname(fileURLToPath(import.meta.url)), "..");
 var settings = await loadSettings(root);
 var dataRoot = settings.dataDirectory;
 var resource = "ui://reply-explainer/panel.html";
-var server = new McpServer({ name: "reply-explainer", version: "0.5.0-beta.4" });
+var server = new McpServer({ name: "reply-explainer", version: "0.5.0-beta.5" });
 server.registerResource("reply-explainer-panel", resource, { mimeType: "text/html;profile=mcp-app" }, async () => ({
   contents: [{
     uri: resource,

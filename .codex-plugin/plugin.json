@@ -1,6 +1,6 @@
 {
   "name": "reply-explainer",
-  "version": "0.5.0-beta.4",
+  "version": "0.5.0-beta.5",
   "description": "Explain the latest local Codex reply in a separate Windows window.",
   "mcpServers": "./.mcp.json",
   "interface": {
