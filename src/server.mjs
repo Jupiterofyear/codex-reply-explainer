@@ -14,7 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const settings = await loadSettings(root);
 const dataRoot = settings.dataDirectory;
 const resource = "ui://reply-explainer/panel.html";
-const server = new McpServer({ name: "reply-explainer", version: "0.5.0-beta.3" });
+const server = new McpServer({ name: "reply-explainer", version: "0.5.0-beta.4" });
 server.registerResource("reply-explainer-panel", resource, { mimeType: "text/html;profile=mcp-app" }, async () => ({
   contents: [{
     uri: resource,

@@ -43,7 +43,7 @@ var AppServerBackend = class {
     const env = { ...process.env, CODEX_HOME: this.home, TEMP: this.directory + "/tmp", TMP: this.directory + "/tmp", RUST_LOG: "error,codex_otel.trace_safe=info" };
     for (const name of ["CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "TRACEPARENT", "TRACESTATE"]) delete env[name];
     this.child = spawn(this.cliPath, args, { cwd: this.cwd, env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-    this.exited = new Promise((resolve) => this.child.once("exit", resolve));
+    this.exited = new Promise((resolve) => this.child.once("close", resolve));
     const failed = (error) => {
       for (const entry of this.pending.values()) {
         clearTimeout(entry.timer);
@@ -74,7 +74,7 @@ var AppServerBackend = class {
     this.child.stderr.on("data", (chunk) => {
       this.stderr = (this.stderr + chunk).slice(-8192);
     });
-    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.3" }, capabilities: { experimentalApi: true } });
+    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.4" }, capabilities: { experimentalApi: true } });
     this.write({ method: "initialized", params: {} });
     return this;
   }
@@ -772,7 +772,8 @@ var QuestionsSession = class {
 // src/worker.mjs
 var [dataRoot, sourceHome, cliPath] = process.argv.slice(2);
 var files = workerFiles(dataRoot);
-process.on("exit", (code) => writeFileSync(path9.join(dataRoot, "worker-exit.json"), JSON.stringify({ pid: process.pid, code, at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n"));
+var failure;
+process.on("exit", (code) => writeFileSync(path9.join(dataRoot, "worker-exit.json"), JSON.stringify({ pid: process.pid, code, error: failure?.message, at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n"));
 var home = path9.join(files.directory, "home");
 var cache = path9.join(home, "plugins/cache");
 var questionDirectory = path9.join(files.directory, "questions");
@@ -855,6 +856,9 @@ try {
       }
     })()
   ]);
+} catch (error) {
+  failure = error;
+  throw error;
 } finally {
   finished = true;
   await closeBackends();

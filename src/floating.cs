@@ -34,7 +34,7 @@ class FloatingExplanation {
     }
     static async Task Request(string node, string dataRoot, string sourceHome, string threadId, bool explain, bool follow = false) {
         var script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "request.mjs");
-        var info = new ProcessStartInfo(node, "\"" + script + "\" \"" + dataRoot + "\" \"" + sourceHome + "\" " + threadId + (follow ? " follow" : explain ? " explain" : " select")) {
+        var info = new ProcessStartInfo(node, "--disable-warning=ExperimentalWarning \"" + script + "\" \"" + dataRoot + "\" \"" + sourceHome + "\" " + threadId + (follow ? " follow" : explain ? " explain" : " select")) {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, StandardErrorEncoding = new UTF8Encoding(false),
             WorkingDirectory = Path.GetDirectoryName(script)
         };

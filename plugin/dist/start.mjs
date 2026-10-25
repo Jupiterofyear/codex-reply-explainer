@@ -1,7 +1,32 @@
 // src/settings.mjs
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+async function resolveCliPath(cliPath) {
+  if (!/[\\/]OpenAI[\\/]Codex[\\/]bin[\\/][0-9a-f]+[\\/]codex\.exe$/i.test(cliPath)) return cliPath;
+  try {
+    await stat(cliPath);
+    return cliPath;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const directory = path.dirname(path.dirname(cliPath));
+  let latest;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[0-9a-f]+$/i.test(entry.name)) continue;
+    const file = path.join(directory, entry.name, "codex.exe");
+    let info;
+    try {
+      info = await stat(file);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (!latest || info.mtimeMs > latest.modified) latest = { file, modified: info.mtimeMs };
+  }
+  if (!latest) throw new Error("\u6CA1\u6709\u627E\u5230\u66F4\u65B0\u540E\u7684 Codex \u7A0B\u5E8F\uFF0C\u8BF7\u91CD\u65B0\u5B89\u88C5 Codex \u6216\u6307\u5B9A\u6709\u6548\u7684 CodexPath\u3002");
+  return latest.file;
+}
 async function loadSettings(root2) {
   let settings2 = JSON.parse(await readFile(path.join(root2, "settings.json"), "utf8"));
   if (settings2.installedSettings) {
@@ -10,7 +35,7 @@ async function loadSettings(root2) {
   }
   return {
     dataDirectory: path.resolve(root2, process.env.REPLY_EXPLAINER_DATA_DIR || settings2.dataDirectory),
-    cliPath: process.env.CODEX_CLI_PATH || settings2.cliPath
+    cliPath: await resolveCliPath(process.env.CODEX_CLI_PATH || settings2.cliPath)
   };
 }
 
@@ -26,7 +51,7 @@ import { setTimeout as delay2 } from "node:timers/promises";
 import path3 from "node:path";
 
 // src/state.mjs
-import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { readFile as readFile2, writeFile, rename, mkdir, readdir as readdir2, rm, stat as stat2 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path2 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -70,7 +95,7 @@ async function isWindowOpen(dataRoot) {
   } catch (error) {
     if (process.platform === "win32" && error.code === "EPERM") {
       try {
-        await stat(file);
+        await stat2(file);
       } catch (checkError) {
         if (checkError.code === "ENOENT") return null;
       }
@@ -151,7 +176,10 @@ async function ensureWorker({ root: root2, dataRoot, sourceHome }) {
   while (Date.now() < deadline) {
     const state = await liveWorker(dataRoot);
     if (state?.status === "ready") return;
-    if (child.exitCode !== null) throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u5931\u8D25\u3002");
+    if (child.exitCode !== null) {
+      const failure = await readJson(path3.join(dataRoot, "worker-exit.json"));
+      throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u5931\u8D25\u3002" + (failure?.pid === child.pid && failure.error ? "\n" + failure.error : ""));
+    }
     await delay2(50);
   }
   throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u8D85\u65F6\u3002");

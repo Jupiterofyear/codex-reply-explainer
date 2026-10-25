@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 **This plugin uses Codex's official `thread/fork` API to create temporary branches, inherit the main chat's context, and reuse cached input where possible.** Explain Codex replies and ask follow-up questions in a separate floating window; explanations and questions stay out of the main chat.
 
-Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
+Beta **0.5.0-beta.4** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
 All current features are maintained on [`main`](https://github.com/Jupiterofyear/codex-reply-explainer/tree/main). Installation and automatic updates follow that branch; no separate question-feature branch is required.
 
@@ -146,6 +146,8 @@ The plugin's interface currently uses Chinese labels. Their English meanings are
 Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前对话” (Explain current conversation). The launcher locates the currently installed version and uses the existing data directory.
 
 Chats opened before an update may retain a failed plugin connection. If the panel still cannot be displayed after updating, wait for running tasks to finish, fully quit and reopen Codex, then use the same entry. The panel's Retry button may keep using the old connection.
+
+Codex updates may remove the previously saved executable. The plugin automatically finds the newest remaining executable in the same desktop installation directory. Existing valid paths and custom executable paths remain unchanged.
 
 If the name does not follow navigation, check that the selected sidebar chat is visible and has a unique name; the window shows the specific error. Explanations require clicking the bottom button. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
 

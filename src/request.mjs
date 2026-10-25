@@ -7,21 +7,26 @@ import { ensureWorker, enqueueStop } from "./worker-client.mjs";
 import { selectChat, writeJson, isCurrentSelection, isRetainedSelection, isWindowOpen, discardSelection, readJson } from "./state.mjs";
 
 const [dataRoot, sourceHome, threadId, action = "explain"] = process.argv.slice(2);
-if (await isWindowOpen(dataRoot)) {
-  if (action !== "follow") await ensureWorker({ root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
-  const title = await readThreadName(sourceHome, threadId);
-  const selection = await selectChat(dataRoot, threadId, title);
-  try {
-    if (action === "explain" && selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
-      const event = await latestReplyEvent(sourceHome, threadId);
-      if (event) await enqueueStop(event, { dataRoot });
-      else if (await isCurrentSelection(dataRoot, selection)) await writeJson(path.join(dataRoot, "floating", "selection.json"), { ...selection, initialStatus: "unavailable" });
-    }
-  } finally {
-    if (selection && !await isRetainedSelection(dataRoot, selection)) {
-      await discardSelection(dataRoot, selection);
-      const file = path.join(dataRoot, "floating", "selection.json");
-      if ((await readJson(file))?.openId === selection.openId) await rm(file, { force: true });
+try {
+  if (await isWindowOpen(dataRoot)) {
+    if (action !== "follow") await ensureWorker({ root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
+    const title = await readThreadName(sourceHome, threadId);
+    const selection = await selectChat(dataRoot, threadId, title);
+    try {
+      if (action === "explain" && selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
+        const event = await latestReplyEvent(sourceHome, threadId);
+        if (event) await enqueueStop(event, { dataRoot });
+        else if (await isCurrentSelection(dataRoot, selection)) await writeJson(path.join(dataRoot, "floating", "selection.json"), { ...selection, initialStatus: "unavailable" });
+      }
+    } finally {
+      if (selection && !await isRetainedSelection(dataRoot, selection)) {
+        await discardSelection(dataRoot, selection);
+        const file = path.join(dataRoot, "floating", "selection.json");
+        if ((await readJson(file))?.openId === selection.openId) await rm(file, { force: true });
+      }
     }
   }
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
 }

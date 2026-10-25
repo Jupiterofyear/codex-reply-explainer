@@ -30,7 +30,10 @@ export async function ensureWorker({ root, dataRoot, sourceHome }) {
   while (Date.now() < deadline) {
     const state = await liveWorker(dataRoot);
     if (state?.status === "ready") return;
-    if (child.exitCode !== null) throw new Error("解释后台启动失败。");
+    if (child.exitCode !== null) {
+      const failure = await readJson(path.join(dataRoot, "worker-exit.json"));
+      throw new Error("解释后台启动失败。" + (failure?.pid === child.pid && failure.error ? "\n" + failure.error : ""));
+    }
     await delay(50);
   }
   throw new Error("解释后台启动超时。");

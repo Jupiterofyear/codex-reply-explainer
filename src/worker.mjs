@@ -10,7 +10,8 @@ import { QuestionsSession } from "./questions.mjs";
 
 const [dataRoot, sourceHome, cliPath] = process.argv.slice(2);
 const files = workerFiles(dataRoot);
-process.on("exit", code => writeFileSync(path.join(dataRoot, "worker-exit.json"), JSON.stringify({ pid: process.pid, code, at: new Date().toISOString() }) + "\n"));
+let failure;
+process.on("exit", code => writeFileSync(path.join(dataRoot, "worker-exit.json"), JSON.stringify({ pid: process.pid, code, error: failure?.message, at: new Date().toISOString() }) + "\n"));
 const home = path.join(files.directory, "home");
 const cache = path.join(home, "plugins/cache");
 const questionDirectory = path.join(files.directory, "questions");
@@ -80,6 +81,9 @@ try {
     })()
   ]);
 
+} catch (error) {
+  failure = error;
+  throw error;
 } finally {
   finished = true;
   await closeBackends();

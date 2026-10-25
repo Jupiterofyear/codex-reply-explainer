@@ -3,7 +3,7 @@ import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { latestReplyEvent } from "../src/latest.mjs";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile, access, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, access, readdir, rm, utimes } from "node:fs/promises";
 import path from "node:path";
 import { spawn, execFileSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -28,6 +28,48 @@ test("relative default data lives under the plugin root", async () => {
   const settings = await loadSettings(folder);
   assert.equal(settings.dataDirectory, path.join(folder, ".local/data"));
   assert.equal(settings.cliPath, process.env.CODEX_CLI_PATH || "codex.exe");
+});
+
+test("a removed desktop CLI version resolves to the latest installed executable", async () => {
+  const { resolveCliPath } = await import("../src/settings.mjs");
+  const directory = path.join(testRoot, "OpenAI/Codex/bin");
+  for (const version of ["1111", "2222", "3333"]) await mkdir(path.join(directory, version), { recursive: true });
+  const older = path.join(directory, "1111/codex.exe"), newer = path.join(directory, "2222/codex.exe");
+  await writeFile(older, "OLDER"); await writeFile(newer, "NEWER");
+  await utimes(older, 1000, 1000); await utimes(newer, 2000, 2000);
+  await writeFile(path.join(directory, "3333/rg.exe"), "LEFTOVER_SEARCH_TOOL");
+  assert.equal(await resolveCliPath(path.join(directory, "0000/codex.exe")), newer);
+  assert.equal(await resolveCliPath(older), older);
+  const custom = path.join(testRoot, "custom/codex.exe");
+  assert.equal(await resolveCliPath(custom), custom);
+  assert.equal(await resolveCliPath("codex.exe"), "codex.exe");
+});
+
+test("a CLI spawn failure preserves the cause and finishes backend cleanup", { timeout: 3000 }, async () => {
+  const { AppServerBackend } = await import("../src/backend.mjs");
+  const backend = new AppServerBackend({ cliPath: path.join(testRoot, "missing-codex.exe"), home: testRoot, directory: testRoot, cwd: testRoot });
+  await assert.rejects(backend.start(), { code: "ENOENT" });
+  await backend.close();
+});
+
+test("manual explanation reports startup failure without warnings or a stack trace", { timeout: 15000 }, async () => {
+  const fixture = await fakeSource("startup-failure");
+  const data = path.join(testRoot, "startup-failure-data");
+  await seedWindow(data, first);
+  const missing = path.join(testRoot, "missing-codex.exe");
+  const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "dist/request.mjs", data, fixture.source, first], {
+    cwd: root, windowsHide: true, stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, CODEX_CLI_PATH: missing }
+  });
+  let stderr = ""; child.stderr.on("data", chunk => stderr += chunk);
+  assert.equal(await new Promise(resolve => child.once("close", resolve)), 1);
+  assert.match(stderr, /解释后台启动失败/);
+  assert.match(stderr, /ENOENT/);
+  assert.doesNotMatch(stderr, /ExperimentalWarning|unsettled top-level await|file:\/\/\/|\n\s+at /);
+  const failure = await readJson(path.join(data, "worker-exit.json"));
+  assert.equal(failure.code, 1);
+  assert.match(failure.error, /ENOENT/);
+  await assert.rejects(access(path.join(data, "backend")), { code: "ENOENT" });
+  assert.equal(await readFile(path.join(fixture.source, "plugins/cache/sentinel.txt"), "utf8"), "KEEP_INSTALLED_PLUGIN");
 });
 
 test("snapshot preserves earlier context and ends before a later turn", () => {

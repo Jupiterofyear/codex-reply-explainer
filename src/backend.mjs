@@ -18,7 +18,7 @@ export class AppServerBackend {
     const env = { ...process.env, CODEX_HOME: this.home, TEMP: this.directory + "/tmp", TMP: this.directory + "/tmp", RUST_LOG: "error,codex_otel.trace_safe=info" };
     for (const name of ["CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "TRACEPARENT", "TRACESTATE"]) delete env[name];
     this.child = spawn(this.cliPath, args, { cwd: this.cwd, env, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-    this.exited = new Promise(resolve => this.child.once("exit", resolve));
+    this.exited = new Promise(resolve => this.child.once("close", resolve));
     const failed = error => {
       for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error); }
       this.pending.clear(); this.active?.reject(error);
@@ -42,7 +42,7 @@ export class AppServerBackend {
     });
     this.stderr = "";
     this.child.stderr.on("data", chunk => { this.stderr = (this.stderr + chunk).slice(-8192); });
-    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.3" }, capabilities: { experimentalApi: true } });
+    await this.request("initialize", { clientInfo: { name: "codex_exec", title: "Codex Reply Explainer", version: "0.5.0-beta.4" }, capabilities: { experimentalApi: true } });
     this.write({ method: "initialized", params: {} });
     return this;
   }

@@ -4,9 +4,34 @@ import path9 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/settings.mjs
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+async function resolveCliPath(cliPath) {
+  if (!/[\\/]OpenAI[\\/]Codex[\\/]bin[\\/][0-9a-f]+[\\/]codex\.exe$/i.test(cliPath)) return cliPath;
+  try {
+    await stat(cliPath);
+    return cliPath;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const directory = path.dirname(path.dirname(cliPath));
+  let latest;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[0-9a-f]+$/i.test(entry.name)) continue;
+    const file = path.join(directory, entry.name, "codex.exe");
+    let info;
+    try {
+      info = await stat(file);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (!latest || info.mtimeMs > latest.modified) latest = { file, modified: info.mtimeMs };
+  }
+  if (!latest) throw new Error("\u6CA1\u6709\u627E\u5230\u66F4\u65B0\u540E\u7684 Codex \u7A0B\u5E8F\uFF0C\u8BF7\u91CD\u65B0\u5B89\u88C5 Codex \u6216\u6307\u5B9A\u6709\u6548\u7684 CodexPath\u3002");
+  return latest.file;
+}
 async function loadSettings(root) {
   let settings = JSON.parse(await readFile(path.join(root, "settings.json"), "utf8"));
   if (settings.installedSettings) {
@@ -15,7 +40,7 @@ async function loadSettings(root) {
   }
   return {
     dataDirectory: path.resolve(root, process.env.REPLY_EXPLAINER_DATA_DIR || settings.dataDirectory),
-    cliPath: process.env.CODEX_CLI_PATH || settings.cliPath
+    cliPath: await resolveCliPath(process.env.CODEX_CLI_PATH || settings.cliPath)
   };
 }
 
@@ -27,7 +52,7 @@ import { setTimeout as delay2 } from "node:timers/promises";
 import path5 from "node:path";
 
 // src/state.mjs
-import { readFile as readFile2, writeFile, rename, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { readFile as readFile2, writeFile, rename, mkdir, readdir as readdir2, rm, stat as stat2 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path2 from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -81,7 +106,7 @@ async function isWindowOpen(dataRoot2) {
   } catch (error) {
     if (process.platform === "win32" && error.code === "EPERM") {
       try {
-        await stat(file);
+        await stat2(file);
       } catch (checkError) {
         if (checkError.code === "ENOENT") return null;
       }
@@ -107,7 +132,7 @@ async function isCurrentSelection(dataRoot2, selection) {
 async function discardSelection(dataRoot2, selection) {
   if (!selection) return;
   const { directory, latest } = explanationFiles(dataRoot2, selection);
-  const files = await readdir(directory);
+  const files = await readdir2(directory);
   for (const file of files) {
     if (file === path2.basename(latest) || file.startsWith("result-" + selection.openId + "-") || file === "questions-" + selection.openId + ".json" || file === "questions-" + selection.openId + "-control.json") await rm(path2.join(directory, file), { force: true });
   }
@@ -243,7 +268,10 @@ async function ensureWorker({ root, dataRoot: dataRoot2, sourceHome: sourceHome2
   while (Date.now() < deadline) {
     const state = await liveWorker(dataRoot2);
     if (state?.status === "ready") return;
-    if (child.exitCode !== null) throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u5931\u8D25\u3002");
+    if (child.exitCode !== null) {
+      const failure = await readJson(path5.join(dataRoot2, "worker-exit.json"));
+      throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u5931\u8D25\u3002" + (failure?.pid === child.pid && failure.error ? "\n" + failure.error : ""));
+    }
     await delay2(50);
   }
   throw new Error("\u89E3\u91CA\u540E\u53F0\u542F\u52A8\u8D85\u65F6\u3002");
@@ -295,7 +323,7 @@ import { DatabaseSync } from "node:sqlite";
 import path8 from "node:path";
 
 // src/history.mjs
-import { readFile as readFile3, readdir as readdir2 } from "node:fs/promises";
+import { readFile as readFile3, readdir as readdir3 } from "node:fs/promises";
 import path7 from "node:path";
 async function readRolloutHistory(sourceHome2, source) {
   async function readSegment(file, end) {
@@ -310,7 +338,7 @@ async function readRolloutHistory(sourceHome2, source) {
     for (const folder of ["sessions", "archived_sessions"]) {
       let entries;
       try {
-        entries = await readdir2(path7.join(sourceHome2, folder), { recursive: true, withFileTypes: true });
+        entries = await readdir3(path7.join(sourceHome2, folder), { recursive: true, withFileTypes: true });
       } catch (error) {
         if (error.code === "ENOENT") continue;
         throw error;
@@ -365,21 +393,26 @@ async function latestReplyEvent(sourceHome2, threadId2) {
 
 // src/request.mjs
 var [dataRoot, sourceHome, threadId, action = "explain"] = process.argv.slice(2);
-if (await isWindowOpen(dataRoot)) {
-  if (action !== "follow") await ensureWorker({ root: path9.resolve(path9.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
-  const title = await readThreadName(sourceHome, threadId);
-  const selection = await selectChat(dataRoot, threadId, title);
-  try {
-    if (action === "explain" && selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
-      const event = await latestReplyEvent(sourceHome, threadId);
-      if (event) await enqueueStop(event, { dataRoot });
-      else if (await isCurrentSelection(dataRoot, selection)) await writeJson(path9.join(dataRoot, "floating", "selection.json"), { ...selection, initialStatus: "unavailable" });
-    }
-  } finally {
-    if (selection && !await isRetainedSelection(dataRoot, selection)) {
-      await discardSelection(dataRoot, selection);
-      const file = path9.join(dataRoot, "floating", "selection.json");
-      if ((await readJson(file))?.openId === selection.openId) await rm3(file, { force: true });
+try {
+  if (await isWindowOpen(dataRoot)) {
+    if (action !== "follow") await ensureWorker({ root: path9.resolve(path9.dirname(fileURLToPath(import.meta.url)), ".."), dataRoot, sourceHome });
+    const title = await readThreadName(sourceHome, threadId);
+    const selection = await selectChat(dataRoot, threadId, title);
+    try {
+      if (action === "explain" && selection?.threadId === threadId && await isCurrentSelection(dataRoot, selection)) {
+        const event = await latestReplyEvent(sourceHome, threadId);
+        if (event) await enqueueStop(event, { dataRoot });
+        else if (await isCurrentSelection(dataRoot, selection)) await writeJson(path9.join(dataRoot, "floating", "selection.json"), { ...selection, initialStatus: "unavailable" });
+      }
+    } finally {
+      if (selection && !await isRetainedSelection(dataRoot, selection)) {
+        await discardSelection(dataRoot, selection);
+        const file = path9.join(dataRoot, "floating", "selection.json");
+        if ((await readJson(file))?.openId === selection.openId) await rm3(file, { force: true });
+      }
     }
   }
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
 }
