@@ -16,6 +16,8 @@ The first question forks the selected chat's latest complete saved context using
 
 Explanations and questions have separate backends and ephemeral branches, so they can generate concurrently. During generation, Send becomes Stop; stopping preserves received text and allows follow-up. Thinking indicators follow backend events: before the first output and below a paragraph when reasoning resumes. Each active stage has a moving highlight and a live clock; completed stages keep their thinking duration, and completed or stopped answers retain total duration. Switching chats preserves the timer. Reduced-motion settings disable the highlight animation. Start over cancels only the active question. The composer and body follow Codex’s UI font size, and code follows its code font size; changes are picked up while the window is open. Question forks disable connector/MCP plugins, use a read-only sandbox, and reject interactive execution requests; the prompt asks the model to answer from existing context without tools. These tool settings can change the cached input prefix, so the historical explanation measurements below do not establish question performance. See [VALIDATION.md](VALIDATION.md) for local checks.
 
+The floating window can shrink to 240 Windows logical units and Settings to 320 (about 360 and 480 screen pixels at 150% scaling). Narrow layouts trim titles, reduce side margins, shorten Settings tab labels, and place its action buttons on two rows. Wider windows restore the original layout; resizing does not reduce the configured font size.
+
 ## Custom prompts
 
 Use the gear button at the top of the floating window to edit Explain and Ask prompts separately, save both, or restore the selected default. Settings apply to all chat tabs and persist in `prompt-settings.json` inside the configured data directory across window closure and plugin updates. Cancel discards unsaved edits. Each field accepts up to 32,000 characters; leaving it empty adds no custom answer requirements.
@@ -130,9 +132,11 @@ A first installation defaults to `.local/data` inside the extracted folder. Exis
 
 ## Open and use
 
+Open the floating window from within Codex: use the plus button beside the conversation, then select **Codex 回复解释（悬浮窗）** in the new tab's tools. No desktop shortcut or automatic startup is required. Selecting the same entry again restores a minimized window and preserves its contents instead of opening another copy.
+
 The plugin's interface currently uses Chinese labels. Their English meanings are included below.
 
-1. Open the local chat you want to explain. In the **top-right corner of the chat area, select “+” → “更多工具” (More tools) → “Codex 回复解释” (Codex Reply Explainer)** to open the floating window.
+1. Open the local chat you want to explain. In the **top-right corner of the chat area, select “+”, then “Codex 回复解释（悬浮窗）” in Tools** to open the floating window.
 2. The window selects that chat and waits for the bottom explanation button to be clicked. Opening it from this menu selects the chat directly. You can close the accompanying internal panel and keep the floating window open. If you retain the panel, its “打开悬浮窗” (Open floating window) button reopens the window directly.
 3. Select **提问 (Ask)** to ask questions using this chat’s context. Enter sends; Shift+Enter inserts a line break. During generation, the send arrow becomes a Stop square. Stopping keeps received text and permits follow-up. Thinking indicators appear before the corresponding output and update their elapsed time each second.
 4. **Changing the main-window chat selects its floating-window tab automatically.** Keep one main window open with its selected sidebar chat visible. Clicking an older tab lets you read its explanations and Q&A and continue working with that chat; automatic following resumes on the next main-window chat change. Recognition uses no focus changes, keystrokes, or clipboard access.
@@ -140,6 +144,8 @@ The plugin's interface currently uses Chinese labels. Their English meanings are
 6. Move and resize the window as needed. **Closing it saves its size and screen position for the next launch**, stops both backends, and clears temporary contents from all chat tabs. If the backend exits unexpectedly, the window retains the partial text and shows an error. Click “解释当前对话” (Explain current conversation) to restart the backend and generate the explanation again.
 
 Another way to open it: after installation, double-click `open.cmd` in the extracted folder, then click “解释当前对话” (Explain current conversation). The launcher locates the currently installed version and uses the existing data directory.
+
+Chats opened before an update may retain a failed plugin connection. If the panel still cannot be displayed after updating, wait for running tasks to finish, fully quit and reopen Codex, then use the same entry. The panel's Retry button may keep using the old connection.
 
 If the name does not follow navigation, check that the selected sidebar chat is visible and has a unique name; the window shows the specific error. Explanations require clicking the bottom button. Ordinary Chat does not provide the local records required by this version; the plugin does not convert it into a new main chat.
 

@@ -73,9 +73,11 @@ class FloatingExplanation {
             if (!created) return 0;
             try {
                 Directory.CreateDirectory(directory);
+                string activationFile = Path.Combine(directory, "activate.json");
+                File.Delete(activationFile);
                 File.WriteAllText(Path.Combine(directory, "window.json"), json.Serialize(new { pid = Process.GetCurrentProcess().Id }), new UTF8Encoding(false));
                 var window = (Window)XamlReader.Parse(@"<Window xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"" xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"" xmlns:shell=""clr-namespace:System.Windows.Shell;assembly=PresentationFramework""
- Title=""Codex 回复解释"" Width=""420"" Height=""860"" MinWidth=""360"" MinHeight=""270"" Topmost=""True"" ShowActivated=""False""
+ Title=""Codex 回复解释"" Width=""420"" Height=""860"" MinWidth=""240"" MinHeight=""270"" Topmost=""True"" ShowActivated=""False""
  FontFamily=""Segoe UI, Microsoft YaHei UI"" FontWeight=""Normal"" Foreground=""#202020"" Background=""White"" WindowStyle=""None"" WindowStartupLocation=""Manual"" ResizeMode=""CanResize"" UseLayoutRounding=""True"" TextOptions.TextFormattingMode=""Display"" TextOptions.TextRenderingMode=""ClearType"">
  <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight=""48"" ResizeBorderThickness=""6"" CornerRadius=""12"" GlassFrameThickness=""0"" UseAeroCaptionButtons=""False""/></shell:WindowChrome.WindowChrome>
  <Window.Resources>
@@ -95,20 +97,20 @@ class FloatingExplanation {
  <Border BorderBrush=""#E5E5E5"" BorderThickness=""1"" CornerRadius=""12"" Background=""White"">
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height=""48""/><RowDefinition Height=""44""/><RowDefinition Height=""38""/><RowDefinition Height=""*""/></Grid.RowDefinitions>
-   <Grid Margin=""20,0,8,0""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/></Grid.ColumnDefinitions>
-    <TextBlock Text=""Codex 回复解释"" FontSize=""14"" FontWeight=""SemiBold"" VerticalAlignment=""Center""/>
+   <Grid x:Name=""WindowHeader"" Margin=""20,0,8,0""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/><ColumnDefinition Width=""36""/></Grid.ColumnDefinitions>
+    <TextBlock Text=""Codex 回复解释"" TextTrimming=""CharacterEllipsis"" Margin=""0,0,8,0"" ToolTip=""Codex 回复解释"" FontSize=""14"" FontWeight=""SemiBold"" VerticalAlignment=""Center""/>
     <Button x:Name=""Settings"" Grid.Column=""1"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""提示词设置"" ToolTip=""提示词设置"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><TextBlock Text=""⚙"" FontFamily=""Segoe UI Symbol"" FontSize=""18""/></Button>
     <Button x:Name=""Minimize"" Grid.Column=""2"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""最小化"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 10,0"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
     <Button x:Name=""CloseWindow"" Grid.Column=""3"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""关闭"" shell:WindowChrome.IsHitTestVisibleInChrome=""True""><Path Data=""M 0,0 L 9,9 M 9,0 L 0,9"" Stroke=""#686868"" StrokeThickness=""1""/></Button>
    </Grid>
-   <TabControl x:Name=""Pages"" Grid.Row=""1"" Grid.RowSpan=""3"" Background=""White"" BorderThickness=""0"" SelectedIndex=""0"">
-    <TabControl.Template><ControlTemplate TargetType=""TabControl""><Grid><Grid.RowDefinitions><RowDefinition Height=""44""/><RowDefinition Height=""38""/><RowDefinition Height=""*""/></Grid.RowDefinitions><Border BorderBrush=""#EAEAEA"" BorderThickness=""0,0,0,1"" Padding=""22,0,0,0""><TabPanel IsItemsHost=""True""/></Border><ContentPresenter x:Name=""PART_SelectedContentHost"" Grid.Row=""2"" ContentSource=""SelectedContent""/></Grid></ControlTemplate></TabControl.Template>
+   <TabControl x:Name=""Pages"" Grid.Row=""1"" Grid.RowSpan=""3"" Background=""White"" BorderThickness=""0"" Padding=""22,0,0,0"" SelectedIndex=""0"">
+    <TabControl.Template><ControlTemplate TargetType=""TabControl""><Grid><Grid.RowDefinitions><RowDefinition Height=""44""/><RowDefinition Height=""38""/><RowDefinition Height=""*""/></Grid.RowDefinitions><Border BorderBrush=""#EAEAEA"" BorderThickness=""0,0,0,1"" Padding=""{TemplateBinding Padding}""><TabPanel IsItemsHost=""True""/></Border><ContentPresenter x:Name=""PART_SelectedContentHost"" Grid.Row=""2"" ContentSource=""SelectedContent""/></Grid></ControlTemplate></TabControl.Template>
     <TabControl.Resources>
      <Style TargetType=""TabItem""><Setter Property=""Foreground"" Value=""#858585""/><Setter Property=""FontSize"" Value=""14""/><Setter Property=""FocusVisualStyle"" Value=""{x:Null}""/><Setter Property=""Template""><Setter.Value><ControlTemplate TargetType=""TabItem""><Border x:Name=""Tab"" BorderThickness=""0,0,0,2"" BorderBrush=""Transparent"" Margin=""0,0,24,0"" Padding=""4,10,4,10"" Background=""Transparent""><ContentPresenter x:Name=""TabHeader"" ContentSource=""Header"" HorizontalAlignment=""Center"" VerticalAlignment=""Center""/></Border><ControlTemplate.Triggers><Trigger Property=""IsSelected"" Value=""True""><Setter Property=""Foreground"" Value=""#202020""/><Setter TargetName=""TabHeader"" Property=""TextElement.FontWeight"" Value=""SemiBold""/><Setter TargetName=""Tab"" Property=""BorderBrush"" Value=""#202020""/></Trigger><Trigger Property=""IsMouseOver"" Value=""True""><Setter Property=""Foreground"" Value=""#202020""/></Trigger><Trigger Property=""IsKeyboardFocused"" Value=""True""><Setter TargetName=""Tab"" Property=""Background"" Value=""#F5F5F5""/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     </TabControl.Resources>
     <TabItem x:Name=""ExplainTab"" Header=""解释"">
-     <Grid Margin=""22,18,22,22""><Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
-      <TextBlock x:Name=""ChatName"" Grid.Row=""0"" Margin=""0,0,0,18"" FontSize=""17"" FontWeight=""SemiBold"" TextWrapping=""Wrap""/>
+     <Grid x:Name=""ExplainLayout"" Margin=""22,18,22,22""><Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
+      <TextBlock x:Name=""ChatName"" Grid.Row=""0"" Margin=""0,0,0,18"" FontSize=""17"" FontWeight=""SemiBold"" TextTrimming=""CharacterEllipsis"" ToolTip=""{Binding Text, RelativeSource={RelativeSource Self}}""/>
       <TextBlock x:Name=""Status"" Grid.Row=""1"" Style=""{StaticResource Notice}""/>
       <Grid x:Name=""ExplanationHost"" Grid.Row=""2""/>
       <TextBlock x:Name=""Failure"" Grid.Row=""3"" Style=""{StaticResource Notice}"" Margin=""0,12,0,0"" Foreground=""#AD5142""/>
@@ -116,12 +118,12 @@ class FloatingExplanation {
      </Grid>
     </TabItem>
     <TabItem x:Name=""AskTab"" Header=""提问"">
-     <Grid Margin=""22,14,22,18""><Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
+     <Grid x:Name=""AskLayout"" Margin=""22,14,22,18""><Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/><RowDefinition Height=""Auto""/><RowDefinition Height=""Auto""/></Grid.RowDefinitions>
       <Grid Margin=""0,0,0,16""><Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""32""/></Grid.ColumnDefinitions>
        <TextBlock x:Name=""AskChatName"" FontSize=""13"" Foreground=""#858585"" TextTrimming=""CharacterEllipsis"" VerticalAlignment=""Center""/>
        <Button x:Name=""QuestionMenu"" Grid.Column=""1"" Style=""{StaticResource WindowButton}"" AutomationProperties.Name=""提问选项"" ToolTip=""提问选项""><StackPanel Orientation=""Horizontal""><Ellipse Width=""3"" Height=""3"" Fill=""#686868"" Margin=""2""/><Ellipse Width=""3"" Height=""3"" Fill=""#686868"" Margin=""2""/><Ellipse Width=""3"" Height=""3"" Fill=""#686868"" Margin=""2""/></StackPanel><Button.ContextMenu><ContextMenu><MenuItem x:Name=""RestartQuestions"" Header=""重新开始提问""/></ContextMenu></Button.ContextMenu></Button>
       </Grid>
-      <Grid Grid.Row=""1""><Grid x:Name=""QuestionsHost""/><StackPanel x:Name=""QuestionWelcome"" VerticalAlignment=""Center"" HorizontalAlignment=""Center"" IsHitTestVisible=""False""><TextBlock Text=""有什么想问的？"" FontSize=""20"" FontWeight=""SemiBold"" HorizontalAlignment=""Center""/><TextBlock x:Name=""QuestionHint"" Text=""结合这段聊天，继续聊聊"" FontSize=""13"" Foreground=""#858585"" Margin=""0,10,0,0"" HorizontalAlignment=""Center""/></StackPanel></Grid>
+      <Grid Grid.Row=""1""><Grid x:Name=""QuestionsHost""/><StackPanel x:Name=""QuestionWelcome"" VerticalAlignment=""Center"" HorizontalAlignment=""Stretch"" IsHitTestVisible=""False""><TextBlock Text=""有什么想问的？"" TextWrapping=""Wrap"" TextAlignment=""Center"" FontSize=""20"" FontWeight=""SemiBold"" HorizontalAlignment=""Center""/><TextBlock x:Name=""QuestionHint"" Text=""结合这段聊天，继续聊聊"" TextWrapping=""Wrap"" TextAlignment=""Center"" FontSize=""13"" Foreground=""#858585"" Margin=""0,10,0,0"" HorizontalAlignment=""Center""/></StackPanel></Grid>
       <StackPanel Grid.Row=""2"" Margin=""0,10,0,0""><TextBlock x:Name=""AskStatus"" Style=""{StaticResource Notice}"" Margin=""0,0,0,8""/><TextBlock x:Name=""AskFailure"" Style=""{StaticResource Notice}"" Foreground=""#AD5142"" Margin=""0,0,0,8""/></StackPanel>
       <Border x:Name=""Composer"" Grid.Row=""3"" ClipToBounds=""True"" CornerRadius=""22"" Background=""White"" BorderBrush=""#E5E5E5"" BorderThickness=""1"" Padding=""14,12,10,10""><Grid><Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""38""/></Grid.RowDefinitions>
        <Grid><TextBox x:Name=""QuestionInput"" AcceptsReturn=""True"" TextWrapping=""Wrap"" MinHeight=""46"" MaxHeight=""140"" Padding=""0"" BorderThickness=""0"" Background=""Transparent"" FontWeight=""Normal"" FontSize=""16"" VerticalScrollBarVisibility=""Auto"" MaxLength=""32000"" AutomationProperties.Name=""输入问题""><TextBox.Template><ControlTemplate TargetType=""TextBox""><ScrollViewer x:Name=""PART_ContentHost""/></ControlTemplate></TextBox.Template></TextBox><TextBlock x:Name=""QuestionPlaceholder"" Text=""询问这段聊天…"" Foreground=""#B4B4B4"" FontWeight=""Normal"" FontSize=""16"" IsHitTestVisible=""False""><TextBlock.Style><Style TargetType=""TextBlock""><Setter Property=""Visibility"" Value=""Collapsed""/><Style.Triggers><DataTrigger Binding=""{Binding Text, ElementName=QuestionInput}"" Value=""""><Setter Property=""Visibility"" Value=""Visible""/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid>
@@ -184,6 +186,16 @@ class FloatingExplanation {
                 bool closed = false, asking = false, submitting = false, selecting = false, questionsInitialized = false, questionReady = false, questionBusy = false, stopping = false;
                 Task questionsInitialization = null;
                 var pages = (TabControl)window.FindName("Pages");
+                window.SizeChanged += (sender, ev) => {
+                    if (!ev.WidthChanged) return;
+                    bool narrow = window.ActualWidth < 340;
+                    double side = narrow ? 12 : 22;
+                    ((Grid)window.FindName("WindowHeader")).Margin = new Thickness(narrow ? 12 : 20, 0, 8, 0);
+                    ((Grid)window.FindName("ExplainLayout")).Margin = new Thickness(side, 18, side, 22);
+                    ((Grid)window.FindName("AskLayout")).Margin = new Thickness(side, 14, side, 18);
+                    pages.Padding = new Thickness(side, 0, 0, 0);
+                    chatStrip.Margin = new Thickness(narrow ? 8 : 18, 4, 12, 2);
+                };
                 var questionInput = (TextBox)window.FindName("QuestionInput");
                 var sendQuestion = (Button)window.FindName("SendQuestion");
                 var questionMenu = (Button)window.FindName("QuestionMenu");
@@ -404,7 +416,14 @@ class FloatingExplanation {
                     catch (Exception error) { if (!closed) { trackingError = error.Message; refresh(); showFailure(trackingError); } }
                 };
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                timer.Tick += async (sender, ev) => await trackAndRefresh();
+                timer.Tick += async (sender, ev) => {
+                    if (File.Exists(activationFile)) {
+                        File.Delete(activationFile);
+                        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+                        window.Activate();
+                    }
+                    await trackAndRefresh();
+                };
                 window.Activated += async (sender, ev) => await trackAndRefresh();
                 button.Click += async (sender, ev) => {
                     selecting = true; button.IsEnabled = false;
@@ -424,6 +443,7 @@ class FloatingExplanation {
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 window.Closed += async (sender, ev) => {
                     closed = true; timer.Stop();
+                    File.Delete(activationFile);
                     File.Delete(Path.Combine(directory, "window.json"));
                     File.Delete(Path.Combine(directory, "selection.json"));
                     File.Delete(Path.Combine(directory, "chats.json"));

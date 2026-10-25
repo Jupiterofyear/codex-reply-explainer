@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { threadDirectory, selectChat, isWindowOpen } from "./state.mjs";
+import { threadDirectory, selectChat, isWindowOpen, writeJson } from "./state.mjs";
 
 export async function readThreadName(sourceHome, threadId) {
   const { DatabaseSync } = await import("node:sqlite");
@@ -34,7 +34,11 @@ export async function openFloatingWindow({ root, dataRoot, sourceHome, threadId,
   const temporary = path.join(directory, "tmp");
   await mkdir(temporary, { recursive: true });
   if (threadId) await selectChat(dataRoot, threadId, title);
-  if (await isWindowOpen(dataRoot)) { await ensureWorker({ root, dataRoot, sourceHome }); return; }
+  if (await isWindowOpen(dataRoot)) {
+    await ensureWorker({ root, dataRoot, sourceHome });
+    await writeJson(path.join(directory, "activate.json"), {});
+    return;
+  }
   const child = spawn(path.join(root, "dist", "floating.exe"), [dataRoot, sourceHome, process.execPath], {
     cwd: root, env: { ...process.env, TMP: temporary, TEMP: temporary },
     windowsHide: false, detached: true, stdio: "ignore"

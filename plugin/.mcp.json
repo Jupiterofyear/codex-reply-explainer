@@ -3,7 +3,7 @@
     "reply-explainer": {
       "command": "node",
       "args": [
-        "${PLUGIN_ROOT}/dist/server.mjs"
+        "./dist/server.mjs"
       ],
       "cwd": ".",
       "env_vars": [

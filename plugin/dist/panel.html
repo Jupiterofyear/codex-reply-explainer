@@ -38,7 +38,7 @@ body{margin:0;padding:24px;line-height:1.65}header{display:flex;align-items:cent
 .thinking-row.live .thinking-label{color:transparent;background:linear-gradient(100deg,#858585 30%,#d6d6d6 48%,#858585 66%);background-size:250% 100%;background-clip:text;-webkit-background-clip:text;animation:thinking-shimmer 2s linear infinite}
 @media(prefers-reduced-motion:reduce){.thinking-row.live .thinking-label{animation:none;background:none;color:#858585}}
 
-</style></head><body><header><span class="dot"></span>Codex 回复解释</header><button id="reopen" type="button">打开悬浮窗</button><p id="floating-note" hidden>悬浮小窗已打开。发消息时自动跟随聊天；点击解释页底部的“解释当前对话”后才会生成解释。关闭小窗后，可以用上方按钮重新打开。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
+</style></head><body><header><span class="dot"></span>Codex 回复解释</header><button id="reopen" type="button">打开悬浮窗</button><p id="floating-note" hidden>悬浮小窗已打开，会自动跟随主窗口选中的聊天。点击解释页底部的“解释当前对话”后才会生成解释。关闭或最小化后，可以用上方按钮重新打开。这个面板可以关闭。</p><p id="status">正在连接当前聊天…</p><div id="explanation"></div><p id="error" role="alert"></p>
 <script type="module">var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {

@@ -132,11 +132,14 @@ test("following a desktop selection updates the chat without starting a backend"
  assert.deepEqual((await readdir(path.join(data,"floating"))).sort(),["chats.json","selection.json","window.json"]);
 });
 
-test("MCP panel is app-only, uses host thread metadata, and returns no model content", async () => {
+test("installed MCP launches from its declared config, stays app-only and uses host thread metadata", async () => {
   const selection = await seedWindow(testRoot, first);
   await seedResult(testRoot, selection, "current", { status: "ready", text: "PRIVATE_EXPLANATION" });
+  const pluginRoot = path.join(root, "plugin");
+  const configured = JSON.parse(await readFile(path.join(pluginRoot, ".mcp.json"), "utf8")).mcpServers["reply-explainer"];
+  await writeJson(path.join(testRoot, "plugins/reply-explainer-settings.json"), { dataDirectory: testRoot, cliPath: "codex.exe" });
   const transport = new StdioClientTransport({
-    command: process.execPath, args: ["dist/server.mjs"], cwd: root,
+    command: configured.command, args: configured.args, cwd: path.resolve(pluginRoot, configured.cwd),
     env: { ...process.env, REPLY_EXPLAINER_DATA_DIR: testRoot, REPLY_EXPLAINER_SOURCE_HOME: testRoot }
   });
   const client = new Client({ name: "plugin-local-test", version: "1" });
@@ -392,6 +395,20 @@ async function registerSource(w) {
 async function questionReady(w, selection) {
  return await until(async()=>{const control=await readJson(questionFiles(w.data,selection).control),s=await readJson(questionFiles(w.data,selection).result);return s?.requestId===control?.requestId&&["ready","error","stopped"].includes(s?.status)&&s;});
 }
+
+test("opening an existing floating window requests activation and preserves its question history",async()=>{
+ const {openFloatingWindow}=await import("../src/floating.mjs");
+ const w=await launchWorker("reopen-floating");const selection=await registerSource(w);
+ await submitQuestion(w.data,selection.openId,"ask","保留这段小窗讨论");const answer=await questionReady(w,selection);assert.equal(answer.status,"ready",answer.error);
+ const marker=await readJson(path.join(w.data,"floating/window.json"));const beforeCalls=await records(w);
+ await openFloatingWindow({root,dataRoot:w.data,sourceHome:w.source,threadId:first,title:"测试聊天"});
+ assert.deepEqual(await readJson(path.join(w.data,"floating/activate.json")),{});
+ assert.deepEqual(await readJson(path.join(w.data,"floating/window.json")),marker);
+ assert.equal((await readJson(path.join(w.data,"floating/selection.json"))).openId,selection.openId);
+ assert.deepEqual(await readJson(questionFiles(w.data,selection).result),answer);
+ assert.equal((await records(w)).filter(x=>x.method==="thread/fork").length,beforeCalls.filter(x=>x.method==="thread/fork").length);
+ await stopWorker(w);
+});
 
 test("prompt settings persist Unicode and blank values, and invalid saves preserve the file", async()=>{
  const data=path.join(testRoot,"prompts");

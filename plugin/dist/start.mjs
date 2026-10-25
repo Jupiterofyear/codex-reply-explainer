@@ -169,6 +169,7 @@ async function openFloatingWindow({ root: root2, dataRoot, sourceHome, threadId,
   if (threadId) await selectChat(dataRoot, threadId, title);
   if (await isWindowOpen(dataRoot)) {
     await ensureWorker({ root: root2, dataRoot, sourceHome });
+    await writeJson(path4.join(directory, "activate.json"), {});
     return;
   }
   const child = spawn2(path4.join(root2, "dist", "floating.exe"), [dataRoot, sourceHome, process.execPath], {
