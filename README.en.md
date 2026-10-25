@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-Explain Codex replies and ask follow-up questions in a separate floating window. **Uses Codex's official temporary fork mechanism to inherit context. Explanations and questions stay out of the main chat.**
+**This plugin uses Codex's official `thread/fork` API to create temporary branches, inherit the main chat's context, and reuse cached input where possible.** Explain Codex replies and ask follow-up questions in a separate floating window; explanations and questions stay out of the main chat.
 
 Beta **0.5.0-beta.3** supports local Codex and local ChatGPT Work chats on Windows x64. Ordinary Chat, Work Cloud, and chats running on remote hosts are currently unsupported. This is a community project, unaffiliated with OpenAI.
 
